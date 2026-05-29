@@ -58,12 +58,16 @@ function matchesPeriode(dateStr, periode) {
 
 export async function fetchRDVData(periode = 'mois_202605') {
   try {
-    // Colonne A→Q = index 0→16
     const rows = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Liste des rendez-vous Equipe!A2:Q300');
     const coaches = ['Alexis', 'Gautier', 'Mathilde', 'Jenny', 'Rémi'];
 
     function empty() {
-      return { rdv: 0, gagnes: 0, encours: 0, perdus: 0, noshow: 0, ca: 0, caEncours: 0, prescripteurCA: 0 };
+      return {
+        rdv: 0, gagnes: 0, encours: 0, perdus: 0, noshow: 0,
+        ca: 0, caEncours: 0, prescripteurCA: 0,
+        // Pour taux de conversion
+        realises: 0,
+      };
     }
 
     const result = { tous: empty() };
@@ -72,43 +76,52 @@ export async function fetchRDVData(periode = 'mois_202605') {
 
     const dealsGagnes  = [];
     const dealsEnCours = [];
+
+    // originesMap: { [origine]: { pris, realises, gagnes, ca } }
     const originesMap  = {};
     const offresMap    = {};
 
     const precPeriode = periode.startsWith('mois_') ? 'mois_prec_' + periode.replace('mois_', '') : null;
 
     rows.forEach(row => {
-      // ── Index corrigés après ajout colonne E ──
-      const prisPar    = row[0]?.trim();   // A
-      const origine    = row[1]?.trim() || 'Non renseigné'; // B
-      const entreprise = row[2]?.trim();   // C
-      const contact    = row[3]?.trim();   // D
-      // E (index 4) = email, ignoré
-      // F (index 5) = Date prise de RDV, ignoré
-      const dateRDV    = row[6]?.trim();   // G
-      const rdvFaitPar = row[7]?.trim();   // H
-      // I (index 8) = Période, ignoré
-      const statut     = row[9]?.trim();   // J
-      const resultat   = row[10]?.trim();  // K
-      const dateSign   = row[11]?.trim();  // L — Date Statut (signature)
-      const offre      = row[12]?.trim() || 'Non défini'; // M
-      const caEst      = parseAmount(row[13]); // N
-      const ca         = parseAmount(row[14]); // O
+      const prisPar    = row[0]?.trim();
+      const origine    = row[1]?.trim() || 'Non renseigné';
+      const entreprise = row[2]?.trim();
+      const contact    = row[3]?.trim();
+      const dateRDV    = row[6]?.trim();
+      const rdvFaitPar = row[7]?.trim();
+      const statut     = row[9]?.trim();
+      const resultat   = row[10]?.trim();
+      const dateSign   = row[11]?.trim();
+      const offre      = row[12]?.trim() || 'Non défini';
+      const caEst      = parseAmount(row[13]);
+      const ca         = parseAmount(row[14]);
 
       if (!prisPar) return;
       const coach = coaches.find(c => rdvFaitPar === c) || coaches.find(c => prisPar === c);
       if (!coach) return;
 
-      // ── Origines : tous RDV réalisés, sans filtre période ──
-      if (statut === 'Réalisé') {
-        if (!originesMap[origine]) originesMap[origine] = { rdv: 0, ca: 0 };
-        originesMap[origine].rdv++;
-        if (resultat === 'Gagné') originesMap[origine].ca += ca;
+      // ── Origines : comptage RDV pris (tous statuts sauf "A venir")
+      // et RDV réalisés (statut === 'Réalisé')
+      if (statut !== 'A venir') {
+        if (!originesMap[origine]) originesMap[origine] = { pris: 0, realises: 0, gagnes: 0, ca: 0 };
+        originesMap[origine].pris++;
+        if (statut === 'Réalisé') {
+          originesMap[origine].realises++;
+          if (resultat === 'Gagné') {
+            originesMap[origine].gagnes++;
+            originesMap[origine].ca += ca;
+          }
+        }
       }
 
       // ── Deals en cours : liste complète, pas de filtre date ──
       if (statut === 'Réalisé' && resultat === 'En cours') {
-        dealsEnCours.push({ entreprise, contact, coach: rdvFaitPar || prisPar, date: dateRDV, offre, caEst });
+        dealsEnCours.push({
+          entreprise, contact,
+          coach: rdvFaitPar || prisPar,
+          date: dateRDV, offre, caEst
+        });
       }
 
       // ── Mois précédent (delta) ──
@@ -119,6 +132,7 @@ export async function fetchRDVData(periode = 'mois_202605') {
             resultPrec.tous.noshow++; resultPrec[coach].noshow++;
           } else if (statut === 'Réalisé') {
             resultPrec.tous.rdv++; resultPrec[coach].rdv++;
+            resultPrec.tous.realises++; resultPrec[coach].realises++;
             if (resultat === 'Gagné')  { resultPrec.tous.gagnes++; resultPrec.tous.ca += ca; resultPrec[coach].gagnes++; resultPrec[coach].ca += ca; }
             if (resultat === 'Perdu')  { resultPrec.tous.perdus++; resultPrec[coach].perdus++; }
           }
@@ -132,6 +146,7 @@ export async function fetchRDVData(periode = 'mois_202605') {
       if (statut !== 'Réalisé') return;
 
       result.tous.rdv++; result[coach].rdv++;
+      result.tous.realises++; result[coach].realises++;
 
       if (resultat === 'Gagné') {
         result.tous.gagnes++; result.tous.ca += ca;
@@ -139,7 +154,11 @@ export async function fetchRDVData(periode = 'mois_202605') {
         if (prisPar === 'Alexis' && offre === 'Prescripteur') result['Alexis'].prescripteurCA += ca;
         if (!offresMap[offre]) offresMap[offre] = { gagnes: 0, perdus: 0, ca: 0 };
         offresMap[offre].gagnes++; offresMap[offre].ca += ca;
-        dealsGagnes.push({ entreprise, contact, coach: rdvFaitPar || prisPar, ca, date: dateSign || dateRDV, offre });
+        dealsGagnes.push({
+          entreprise, contact,
+          coach: rdvFaitPar || prisPar,
+          ca, date: dateSign || dateRDV, offre
+        });
       } else if (resultat === 'En cours') {
         result.tous.encours++; result[coach].encours++;
         result.tous.caEncours += caEst; result[coach].caEncours += caEst;
