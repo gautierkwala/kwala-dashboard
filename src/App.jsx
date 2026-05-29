@@ -2,124 +2,127 @@ import { useState, useEffect, useMemo } from "react";
 import { fetchRDVData } from "./sheets";
 
 const LOGO = "/logo.jpeg";
-
 const COACHES = ['Alexis', 'Rémi', 'Mathilde', 'Jenny', 'Gautier'];
 const COACH_COLORS = {
-  Alexis:   '#2E8BE6',
-  Rémi:     '#7F77DD',
-  Mathilde: '#E8417E',
-  Jenny:    '#BA7517',
-  Gautier:  '#1D9E75',
+  Alexis: '#2E8BE6', Rémi: '#7F77DD', Mathilde: '#E8417E',
+  Jenny: '#BA7517', Gautier: '#1D9E75',
 };
 const OFFRE_BADGE = {
-  'Equipe':       { bg: '#e6f1fb', color: '#185FA5' },
-  'Entrepreneur': { bg: '#FAEEDA', color: '#854F0B' },
+  'Equipe':       { bg: '#FAEEDA', color: '#854F0B' },
+  'Entrepreneur': { bg: '#E6F1FB', color: '#185FA5' },
   'Prescripteur': { bg: '#E1F5EE', color: '#0F6E56' },
 };
-
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/13r_qAdwCmtdriilX1nzL56r0eEaDX4fDw4vZx3pvfUM/edit';
+
+const OBJ_CA_MENSUEL = 30000;
+const OBJ_RDV_MENSUEL = 40;
+const OBJ_DEALS_MENSUEL = 12;
+
+function getObjectifs(granularite) {
+  const now = new Date();
+  let factor = 1;
+  if (granularite === 'trimestre') factor = 3;
+  else if (granularite === 'ytd') factor = now.getMonth() + 1;
+  return {
+    ca: OBJ_CA_MENSUEL * factor,
+    rdv: OBJ_RDV_MENSUEL * factor,
+    deals: OBJ_DEALS_MENSUEL * factor,
+  };
+}
 
 function fmtCA(v) {
   if (!v || v === 0) return '—';
   if (v >= 1000) return (v / 1000).toFixed(1).replace('.0', '') + 'k€';
-  return v + '€';
+  return Math.round(v) + '€';
 }
 function fmtPct(num, den) {
   if (!den) return '—';
   return Math.round((num / den) * 100) + '%';
 }
-function fmtDate(str) {
-  if (!str) return '—';
-  return str;
+
+function getPeriodeKey(granularite, year, month) {
+  if (granularite === 'mois') return `mois_${year}${String(month + 1).padStart(2, '0')}`;
+  if (granularite === 'trimestre') {
+    const t = Math.floor(month / 3) + 1;
+    return `t${t}`;
+  }
+  return 'ytd';
 }
 
-function useWindowWidth() {
-  const [width, setWidth] = useState(window.innerWidth);
-  useEffect(() => {
-    const handler = () => setWidth(window.innerWidth);
-    window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
-  }, []);
-  return width;
+function getMonthLabel(year, month) {
+  return new Date(year, month, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
 }
 
-function ArcGauge({ value, max, size = 150, label, sub, color, gradient }) {
-  const r = (size / 2) - 12;
-  const cx = size / 2;
-  const cy = size * 0.55;
-  const totalArc = Math.PI * r;
+
+function ArcGauge({ value, max, color, size = 140 }) {
   const pct = Math.min(value / (max || 1), 1);
+  const r = (size / 2) - 14;
+  const cx = size / 2;
+  const cy = size * 0.56;
+  const totalArc = Math.PI * r;
   const offset = totalArc * (1 - pct);
-  const x1 = cx - r;
-  const y1 = cy;
-  const x2 = cx + r;
-  const y2 = cy;
-  const gradId = 'grad_' + label?.replace(/\s/g, '') + size;
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-      <div style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: 4, textAlign: 'center' }}>{label}</div>
-      <svg width={size} height={size * 0.58} viewBox={`0 0 ${size} ${size * 0.58}`} aria-hidden="true">
-        {gradient && (
-          <defs>
-            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#1D9E75" />
-              <stop offset="100%" stopColor="#2E8BE6" />
-            </linearGradient>
-          </defs>
-        )}
-        <path d={`M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`}
-          fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="11" strokeLinecap="round" />
-        <path d={`M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`}
-          fill="none"
-          stroke={gradient ? `url(#${gradId})` : (color || '#2E8BE6')}
-          strokeWidth="11" strokeLinecap="round"
-          strokeDasharray={totalArc}
-          strokeDashoffset={offset} />
-        <text x={cx} y={cy - 2} textAnchor="middle" fill="white"
-          fontSize={size > 130 ? 22 : 17} fontWeight="700">
-          {Math.round(pct * 100)}%
-        </text>
-      </svg>
-      <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, marginTop: 1 }}>{sub}</div>
-    </div>
+    <svg width={size} height={size * 0.6} viewBox={`0 0 ${size} ${size * 0.6}`} aria-hidden="true">
+      <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+        fill="none" stroke="rgba(0,0,0,0.07)" strokeWidth="12" strokeLinecap="round" />
+      <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+        fill="none" stroke={color} strokeWidth="12" strokeLinecap="round"
+        strokeDasharray={totalArc} strokeDashoffset={offset}
+        style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(.4,0,.2,1)' }} />
+      <text x={cx} y={cy - 4} textAnchor="middle"
+        style={{ fill: 'var(--txt)', fontSize: size > 120 ? 22 : 18, fontWeight: 600, fontFamily: 'DM Sans, sans-serif' }}>
+        {Math.round(pct * 100)}%
+      </text>
+    </svg>
   );
 }
 
 function Badge({ offre }) {
-  const style = OFFRE_BADGE[offre] || { bg: '#EEEDFE', color: '#3C3489' };
+  const s = OFFRE_BADGE[offre] || { bg: '#F1EFE8', color: '#5F5E5A' };
   return (
-    <span style={{
-      display: 'inline-block', fontSize: 9, padding: '1px 6px',
-      borderRadius: 20, fontWeight: 500,
-      background: style.bg, color: style.color
-    }}>{offre}</span>
+    <span style={{ display: 'inline-block', fontSize: 10, padding: '2px 7px', borderRadius: 20, fontWeight: 500, background: s.bg, color: s.color }}>
+      {offre || '—'}
+    </span>
   );
 }
 
 function CoachDot({ coach }) {
+  return <span style={{ width: 7, height: 7, borderRadius: '50%', display: 'inline-block', marginRight: 4, verticalAlign: 'middle', background: COACH_COLORS[coach] || '#888' }} />;
+}
+
+function MiniBarChart({ data, objLine, color }) {
+  const max = Math.max(...data.map(d => d.val || 0), objLine || 0, 1);
+  const h = 80;
   return (
-    <span style={{
-      width: 7, height: 7, borderRadius: '50%', display: 'inline-block',
-      marginRight: 3, verticalAlign: 'middle',
-      background: COACH_COLORS[coach] || '#888'
-    }} />
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: h, position: 'relative', paddingTop: 8 }}>
+      {data.map((d, i) => {
+        const barH = Math.round((d.val / max) * (h - 16));
+        const isProjOnly = d.proj && !d.val;
+        return (
+          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <div style={{ width: '100%', height: barH || 3, borderRadius: '2px 2px 0 0', background: isProjOnly ? `${color}30` : d.isCurrent ? color : `${color}70`, border: isProjOnly ? `1px dashed ${color}` : 'none', boxSizing: 'border-box' }} />
+            <span style={{ fontSize: 9, color: 'var(--txt2)', fontWeight: d.isCurrent ? 600 : 400 }}>{d.label}</span>
+          </div>
+        );
+      })}
+      {objLine && (
+        <div style={{ position: 'absolute', left: 0, right: 0, height: 1, background: '#E24B4A', opacity: 0.7, bottom: 16 + Math.round((objLine / max) * (h - 16)), pointerEvents: 'none' }} />
+      )}
+    </div>
   );
 }
 
 function SortableTable({ data }) {
   const [sortCol, setSortCol] = useState(3);
-  const [sortDir, setSortDir] = useState(1);
-
+  const [sortDir, setSortDir] = useState(-1);
   const cols = [
-    { label: 'Contact',   key: 'contact' },
-    { label: 'Entreprise',key: 'entreprise' },
-    { label: 'Coach',     key: 'coach' },
-    { label: 'Date RDV',  key: 'date' },
-    { label: 'Offre',     key: 'offre' },
-    { label: 'CA est.',   key: 'caEst', right: true },
+    { label: 'Contact', key: 'contact' },
+    { label: 'Entreprise', key: 'entreprise' },
+    { label: 'Coach', key: 'coach' },
+    { label: 'Date RDV', key: 'date' },
+    { label: 'Offre', key: 'offre' },
+    { label: 'CA est.', key: 'caEst', right: true },
   ];
-
   const sorted = useMemo(() => {
     return [...(data || [])].sort((a, b) => {
       const k = cols[sortCol].key;
@@ -130,90 +133,275 @@ function SortableTable({ data }) {
     });
   }, [data, sortCol, sortDir]);
 
-  const handleSort = (i) => {
-    if (sortCol === i) setSortDir(d => -d);
-    else { setSortCol(i); setSortDir(1); }
-  };
+  const th = (c, i) => ({
+    padding: '4px 8px 6px', fontSize: 11, fontWeight: 400,
+    color: sortCol === i ? '#2E8BE6' : 'var(--txt2)',
+    textAlign: c.right ? 'right' : 'left',
+    borderBottom: '0.5px solid var(--bdr)',
+    cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap',
+  });
 
   return (
-    <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
-      <thead>
-        <tr>
-          {cols.map((c, i) => (
-            <th key={i} onClick={() => handleSort(i)} style={{
-              color: sortCol === i ? '#2E8BE6' : '#4b6fa8',
-              fontWeight: 400,
-              textAlign: c.right ? 'right' : 'left',
-              padding: '3px 6px 6px',
-              borderBottom: '0.5px solid #c7d9f5',
-              whiteSpace: 'nowrap',
-              cursor: 'pointer',
-              userSelect: 'none',
-              fontSize: 11,
-            }}>
-              {c.label}{' '}
-              <span style={{ fontSize: 9, color: sortCol === i ? '#2E8BE6' : '#c7d9f5' }}>
-                {sortCol === i ? (sortDir === 1 ? '↑' : '↓') : '⇅'}
-              </span>
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {sorted.map((d, i) => (
-          <tr key={i}>
-            <td style={{ padding: '5px 6px', borderBottom: '0.5px solid #eef4fd', color: '#0f1f3d' }}>{d.contact}</td>
-            <td style={{ padding: '5px 6px', borderBottom: '0.5px solid #eef4fd', color: '#0f1f3d' }}>{d.entreprise}</td>
-            <td style={{ padding: '5px 6px', borderBottom: '0.5px solid #eef4fd', color: '#0f1f3d' }}>
-              <CoachDot coach={d.coach} />{d.coach}
-            </td>
-            <td style={{ padding: '5px 6px', borderBottom: '0.5px solid #eef4fd', color: '#0f1f3d' }}>{fmtDate(d.date)}</td>
-            <td style={{ padding: '5px 6px', borderBottom: '0.5px solid #eef4fd' }}><Badge offre={d.offre} /></td>
-            <td style={{ padding: '5px 6px', borderBottom: '0.5px solid #eef4fd', textAlign: 'right', fontWeight: 600, color: '#0f1f3d' }}>
-              {fmtCA(d.caEst)}
-            </td>
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse', minWidth: 480 }}>
+        <thead>
+          <tr>
+            {cols.map((c, i) => (
+              <th key={i} style={th(c, i)} onClick={() => { if (sortCol === i) setSortDir(d => -d); else { setSortCol(i); setSortDir(1); } }}>
+                {c.label} <span style={{ fontSize: 9, opacity: 0.5 }}>{sortCol === i ? (sortDir === 1 ? '↑' : '↓') : '⇅'}</span>
+              </th>
+            ))}
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {sorted.map((d, i) => (
+            <tr key={i} style={{ background: i % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.015)' }}>
+              <td style={{ padding: '5px 8px', borderBottom: '0.5px solid var(--bdr)', color: 'var(--txt)' }}>{d.contact || '—'}</td>
+              <td style={{ padding: '5px 8px', borderBottom: '0.5px solid var(--bdr)', color: 'var(--txt)' }}>{d.entreprise || '—'}</td>
+              <td style={{ padding: '5px 8px', borderBottom: '0.5px solid var(--bdr)', color: 'var(--txt)' }}><CoachDot coach={d.coach} />{d.coach}</td>
+              <td style={{ padding: '5px 8px', borderBottom: '0.5px solid var(--bdr)', color: 'var(--txt2)' }}>{d.date || '—'}</td>
+              <td style={{ padding: '5px 8px', borderBottom: '0.5px solid var(--bdr)' }}><Badge offre={d.offre} /></td>
+              <td style={{ padding: '5px 8px', borderBottom: '0.5px solid var(--bdr)', textAlign: 'right', fontWeight: 600, color: 'var(--txt)' }}>{fmtCA(d.caEst)}</td>
+            </tr>
+          ))}
+          {sorted.length === 0 && (
+            <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: 'var(--txt2)', fontSize: 11 }}>Aucun deal en cours</td></tr>
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
+const CSS = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+  :root {
+    --bg: #F4F6FA;
+    --surface: #FFFFFF;
+    --bdr: rgba(0,0,0,0.08);
+    --bdr2: rgba(0,0,0,0.14);
+    --txt: #0D1B2A;
+    --txt2: #6B7A8D;
+    --txt3: #A0AABB;
+    --accent: #2E8BE6;
+    --green: #1D9E75;
+    --red: #E24B4A;
+    --amber: #BA7517;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); font-family: 'DM Sans', sans-serif; }
+  .db { min-height: 100vh; background: var(--bg); }
+
+  .hdr {
+    background: var(--surface);
+    border-bottom: 0.5px solid var(--bdr);
+    padding: 0 16px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .hdr-title { font-size: 13px; font-weight: 600; letter-spacing: -0.2px; color: var(--txt); flex: 1; }
+
+  .sub-hdr {
+    background: var(--surface);
+    border-bottom: 0.5px solid var(--bdr);
+    padding: 0 16px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    position: sticky;
+    top: 44px;
+    z-index: 19;
+  }
+
+  .logo-wrap {
+    width: 26px; height: 26px; border-radius: 6px;
+    overflow: hidden; flex-shrink: 0;
+    border: 0.5px solid var(--bdr);
+  }
+  .logo-wrap img { width: 100%; height: 100%; object-fit: cover; }
+
+  .nav-month {
+    display: flex; align-items: center;
+    border: 0.5px solid var(--bdr2); border-radius: 8px;
+    overflow: hidden; height: 28px;
+  }
+  .nav-btn {
+    background: transparent; border: none; padding: 0 8px;
+    height: 100%; cursor: pointer; color: var(--txt2);
+    font-size: 14px; line-height: 1; display: flex; align-items: center;
+    transition: background 0.1s;
+  }
+  .nav-btn:hover { background: var(--bg); }
+  .nav-label {
+    padding: 0 10px; font-size: 12px; font-weight: 500;
+    border-left: 0.5px solid var(--bdr); border-right: 0.5px solid var(--bdr);
+    white-space: nowrap; color: var(--txt); height: 100%;
+    display: flex; align-items: center; cursor: pointer;
+  }
+
+  .pills { display: flex; gap: 3px; }
+  .pill {
+    padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 500;
+    border: 0.5px solid var(--bdr2); background: transparent;
+    color: var(--txt2); cursor: pointer; white-space: nowrap;
+    transition: all 0.12s; font-family: 'DM Sans', sans-serif;
+    display: flex; align-items: center; gap: 3px;
+  }
+  .pill:hover { background: var(--bg); }
+  .pill.on { background: var(--txt); color: white; border-color: transparent; }
+  .pill.coach-on { color: white; border-color: transparent; }
+
+  .vsep { width: 0.5px; height: 16px; background: var(--bdr); flex-shrink: 0; }
+
+  .body { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+  .gauges-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .gcard {
+    background: var(--surface); border: 0.5px solid var(--bdr);
+    border-radius: 12px; padding: 14px 16px;
+  }
+  .gcard-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+  .gcard-label { font-size: 11px; color: var(--txt2); font-weight: 500; display: flex; align-items: center; gap: 4px; }
+  .gcard-obj { font-size: 11px; color: var(--txt3); }
+  .gauge-wrap { display: flex; align-items: center; gap: 12px; }
+  .gauge-meta { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+
+  .meta-row { font-size: 11px; display: flex; align-items: center; gap: 4px; }
+  .up { color: var(--green); } .dn { color: var(--red); } .neu { color: var(--txt2); }
+
+  .pill-target {
+    background: #E6F1FB; color: #0C447C;
+    border-radius: 7px; padding: 5px 9px;
+    font-size: 11px; font-weight: 600; margin-top: 2px;
+  }
+  .pill-proj {
+    background: #E1F5EE; color: #085041;
+    border-radius: 7px; padding: 5px 9px;
+    font-size: 11px; font-weight: 500;
+  }
+
+  .kpi-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .kpi {
+    background: var(--surface); border: 0.5px solid var(--bdr);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .kpi-lbl { font-size: 10px; color: var(--txt2); margin-bottom: 5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
+  .kpi-val { font-size: 20px; font-weight: 600; line-height: 1; margin-bottom: 4px; color: var(--txt); }
+  .kpi-trend { font-size: 10px; display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+
+  .chart-card {
+    background: var(--surface); border: 0.5px solid var(--bdr);
+    border-radius: 12px; padding: 12px 14px;
+  }
+  .chart-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .chart-title { font-size: 12px; font-weight: 600; color: var(--txt); }
+  .chart-sub { font-size: 11px; color: var(--txt2); }
+
+  .chart-legend { display: flex; gap: 12px; margin-bottom: 8px; }
+  .leg-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--txt2); }
+  .leg-sq { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .leg-line { width: 14px; height: 1.5px; background: var(--red); opacity: 0.7; flex-shrink: 0; }
+
+  .tables-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tcard {
+    background: var(--surface); border: 0.5px solid var(--bdr);
+    border-radius: 12px; padding: 12px 14px;
+  }
+  .tcard-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .tcard-title { font-size: 12px; font-weight: 600; color: var(--txt); }
+  .tcard-sub { font-size: 11px; color: var(--txt2); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { color: var(--txt2); font-weight: 500; padding: 4px 8px 6px; border-bottom: 0.5px solid var(--bdr); text-align: left; white-space: nowrap; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3px; }
+  td { padding: 5px 8px; border-bottom: 0.5px solid var(--bdr); color: var(--txt); }
+  tr:last-child td { border-bottom: none; }
+
+  .link-btn {
+    font-size: 10px; color: var(--txt2); text-decoration: none;
+    border: 0.5px solid var(--bdr); border-radius: 6px;
+    padding: 2px 7px; white-space: nowrap;
+  }
+  .link-btn:hover { color: var(--txt); }
+
+  @media (max-width: 600px) {
+    .gauges-row { grid-template-columns: 1fr; }
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .tables-row { grid-template-columns: 1fr; }
+    .gauge-wrap { flex-direction: column; align-items: flex-start; }
+    .hdr { gap: 6px; }
+  }
+`;
+
+// ─── Calcul projection ─────────────────────────────────────
+function calcProjection(realise, year, month, granularite) {
+  const now = new Date();
+  const isCurrentPeriod = granularite === 'mois'
+    ? now.getFullYear() === year && now.getMonth() === month
+    : true;
+  if (!isCurrentPeriod) return null;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const dayProgress = Math.min(now.getDate() / daysInMonth, 1);
+  if (dayProgress <= 0) return null;
+  return Math.round(realise / dayProgress);
+}
+
+
 export default function App() {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth());
+  const [granularite, setGranularite] = useState('mois');
   const [coach, setCoach] = useState('tous');
-  const [periode, setPeriode] = useState('ytd');
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [updatedAt, setUpdatedAt] = useState('');
-  const width = useWindowWidth();
-  const isMobile = width < 600;
 
-  useEffect(() => {
-    const now = new Date();
-    setUpdatedAt(now.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' }));
-  }, []);
+  const periodeKey = getPeriodeKey(granularite, year, month);
+  const obj = getObjectifs(granularite);
 
   useEffect(() => {
     setLoading(true);
-    fetchRDVData(periode).then(d => {
+    fetchRDVData(periodeKey).then(d => {
       setData(d);
       setLoading(false);
     });
-  }, [periode]);
+  }, [periodeKey]);
 
   const stats = useMemo(() => {
     if (!data) return null;
-    const key = coach === 'tous' ? 'tous' : coach;
-    return data[key] || data['tous'];
+    return (coach !== 'tous' && data[coach]) ? data[coach] : data['tous'];
   }, [data, coach]);
 
-  const now = new Date();
-  const objRDV = (periode === 't1' || periode === 't2') ? 60
-    : periode === 'ytd' ? 20 * (now.getMonth() + 1)
-    : 20;
-  const objCA = (periode === 't1' || periode === 't2') ? 90000
-    : periode === 'ytd' ? 30000 * (now.getMonth() + 1)
-    : 30000;
+  const prevMonth = () => {
+    if (month === 0) { setMonth(11); setYear(y => y - 1); }
+    else setMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (month === 11) { setMonth(0); setYear(y => y + 1); }
+    else setMonth(m => m + 1);
+  };
+
+  const caRealise = stats?.ca || 0;
+  const rdvRealise = stats?.rdv || 0;
+  const dealsGagnes = stats?.gagnes || 0;
+  const caEncours = stats?.caEncours || 0;
+  const encours = stats?.encours || 0;
+  const perdus = stats?.perdus || 0;
+  const panierMoyen = dealsGagnes > 0 ? Math.round(caRealise / dealsGagnes) : 0;
+  const tauxConv = fmtPct(dealsGagnes, dealsGagnes + perdus);
+
+  const projCA = calcProjection(caRealise, year, month, granularite);
+  const projRDV = calcProjection(rdvRealise, year, month, granularite);
+
+  const resteCA = Math.max(0, obj.ca - caRealise);
+  const resteRDV = Math.max(0, obj.rdv - rdvRealise);
+  const resteDeals = Math.max(0, obj.deals - dealsGagnes);
 
   const origines = useMemo(() => {
     if (!data?._origines) return [];
@@ -222,232 +410,268 @@ export default function App() {
       .sort((a, b) => b.pris - a.pris);
   }, [data]);
 
-  const offres = useMemo(() => {
-    if (!data?._offres) return [];
-    return Object.entries(data._offres).map(([nom, o]) => ({ nom, ...o }));
-  }, [data]);
+  const monthLabel = granularite === 'mois'
+    ? getMonthLabel(year, month)
+    : granularite === 'trimestre'
+      ? `T${Math.floor(month / 3) + 1} ${year}`
+      : `YTD ${year}`;
 
-  const taux = stats ? fmtPct(stats.gagnes, stats.gagnes + stats.perdus) : '—';
-  const panierMoyen = stats?.gagnes > 0 ? Math.round(stats.ca / stats.gagnes) : 0;
-  const pill = periode === 't1' ? 'T1 2026' : periode === 't2' ? 'T2 2026' : 'YTD 2026';
-
-  const fbtn = (active, borderColor) => ({
-    background: active ? '#2E8BE6' : 'rgba(255,255,255,0.07)',
-    border: `0.5px solid ${active ? '#2E8BE6' : (borderColor || 'rgba(255,255,255,0.15)')}`,
-    color: active ? 'white' : (borderColor || 'rgba(255,255,255,0.65)'),
-    fontSize: 11, padding: '4px 10px', borderRadius: 20, cursor: 'pointer',
-  });
-
-  const panel = {
-    background: 'white', borderRadius: 10,
-    padding: '12px 14px', border: '0.5px solid #c7d9f5',
-  };
-
-  const mc = { ...panel, borderRadius: 8 };
-
-  const thStyle = (right) => ({
-    color: '#4b6fa8', fontWeight: 400,
-    textAlign: right ? 'right' : 'left',
-    padding: '3px 6px 6px',
-    borderBottom: '0.5px solid #c7d9f5',
-    fontSize: 11,
-  });
-
-  const tdStyle = (right, bold) => ({
-    padding: '5px 6px',
-    borderBottom: '0.5px solid #eef4fd',
-    color: '#0f1f3d',
-    textAlign: right ? 'right' : 'left',
-    fontWeight: bold ? 600 : 400,
-  });
+  const chartData = useMemo(() => {
+    const months = [];
+    const now = new Date();
+    const start = Math.max(0, month - 4);
+    for (let i = start; i <= Math.min(11, month + 1); i++) {
+      const label = new Date(year, i, 1).toLocaleDateString('fr-FR', { month: 'short' });
+      months.push({
+        label,
+        val: i < month ? null : i === month ? caRealise : null,
+        proj: i === month + 1,
+        isCurrent: i === month,
+      });
+    }
+    return months;
+  }, [month, year, caRealise]);
 
   return (
-    <div style={{ background: '#eef4fd', minHeight: '100vh', fontFamily: "'Helvetica Neue', Arial, sans-serif" }}>
+    <>
+      <style>{CSS}</style>
+      <div className="db">
 
-      {/* HEADER */}
-      <div style={{ background: '#0f1f3d', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <img src={LOGO} alt="Kwala" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />
-        <span style={{ color: 'white', fontSize: 14, fontWeight: 500, flex: 1 }}>Kwala Dashboard</span>
-        <span style={{ background: '#2E8BE6', color: 'white', fontSize: 10, padding: '2px 8px', borderRadius: 20 }}>{pill}</span>
-        <span style={{ color: 'rgba(255,255,255,0.45)', fontSize: 10 }}>màj {updatedAt}</span>
-        <a href={SHEET_URL} target="_blank" rel="noreferrer"
-          style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10, marginLeft: 8, textDecoration: 'none', border: '0.5px solid rgba(255,255,255,0.2)', borderRadius: 6, padding: '2px 7px' }}>
-          ↗ Sheet
-        </a>
-      </div>
+        {/* HEADER LIGNE 1 */}
+        <div className="hdr">
+          <div className="logo-wrap">
+            <img src={LOGO} alt="Kwala" />
+          </div>
+          <span className="hdr-title">Kwala Dashboard</span>
 
-      {/* FILTRES */}
-      <div style={{ background: '#0f1f3d', padding: '6px 16px 10px', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-        <button style={fbtn(coach === 'tous')} onClick={() => setCoach('tous')}>Tous</button>
-        {COACHES.map(c => (
-          <button key={c}
-            style={fbtn(coach === c, COACH_COLORS[c])}
-            onClick={() => setCoach(c)}>
-            {c}
-          </button>
-        ))}
-        <div style={{ flex: 1 }} />
-        {['ytd', 't1', 't2'].map(p => (
-          <button key={p} style={fbtn(periode === p)}
-            onClick={() => setPeriode(p)}>
-            {p === 'ytd' ? 'YTD' : p.toUpperCase()}
-          </button>
-        ))}
-      </div>
-
-      {loading ? (
-        <div style={{ padding: 40, textAlign: 'center', color: '#4b6fa8' }}>Chargement…</div>
-      ) : (
-        <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-          {/* HERO */}
-          <div style={{ display: 'flex', gap: 10, flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-
-            <div style={{ background: '#0f1f3d', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: isMobile ? '1 1 100%' : 1.3 }}>
-              <ArcGauge value={stats?.ca || 0} max={objCA} size={150}
-                label={`CA signé — obj. ${fmtCA(objCA)}`}
-                sub={`${fmtCA(stats?.ca || 0)} / ${fmtCA(objCA)}`}
-                gradient />
-            </div>
-
-            <div style={{ background: '#162b4d', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', flex: isMobile ? '1 1 calc(50% - 5px)' : 0.9 }}>
-              <ArcGauge value={stats?.rdv || 0} max={objRDV} size={120}
-                label={`RDV réalisés — obj. ${objRDV}`}
-                sub={`${stats?.rdv || 0} / ${objRDV} RDV`}
-                color="#2E8BE6" />
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: isMobile ? 'row' : 'column', gap: 7, flex: isMobile ? '1 1 100%' : 1, flexWrap: 'wrap' }}>
-              <div style={mc}>
-                <div style={{ color: '#4b6fa8', fontSize: 10, marginBottom: 3 }}>Deals gagnés</div>
-                <div style={{ color: '#0f1f3d', fontSize: 18, fontWeight: 600 }}>{stats?.gagnes || 0}</div>
-                <div style={{ color: '#7da3c8', fontSize: 10, marginTop: 1 }}>Conv. {taux}</div>
-              </div>
-              <div style={mc}>
-                <div style={{ color: '#4b6fa8', fontSize: 10, marginBottom: 3 }}>Panier moyen</div>
-                <div style={{ color: '#0f1f3d', fontSize: 18, fontWeight: 600 }}>{fmtCA(panierMoyen)}</div>
-              </div>
-              <div style={mc}>
-                <div style={{ color: '#4b6fa8', fontSize: 10, marginBottom: 3 }}>Pipe estimé</div>
-                <div style={{ color: '#0f1f3d', fontSize: 18, fontWeight: 600 }}>{fmtCA(stats?.caEncours || 0)}</div>
-                <div style={{ color: '#7da3c8', fontSize: 10, marginTop: 1 }}>{stats?.encours || 0} deals en cours</div>
-              </div>
-            </div>
+          <div className="nav-month">
+            <button className="nav-btn" onClick={prevMonth} aria-label="Mois précédent">‹</button>
+            <span className="nav-label">{monthLabel} ▾</span>
+            <button className="nav-btn" onClick={nextMonth} aria-label="Mois suivant">›</button>
           </div>
 
-          {/* OFFRES + DEALS SIGNÉS */}
-          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1.6fr', gap: 10 }}>
+          <div className="pills">
+            {['mois', 'trimestre', 'ytd'].map(g => (
+              <button key={g} className={`pill${granularite === g ? ' on' : ''}`} onClick={() => setGranularite(g)}>
+                {g === 'mois' ? 'Mois' : g === 'trimestre' ? 'Trimestre' : 'YTD'}
+              </button>
+            ))}
+          </div>
 
-            <div style={panel}>
-              <div style={{ color: '#0f1f3d', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Répartition par offre</div>
-              <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={thStyle(false)}>Offre</th>
-                    <th style={thStyle(true)}>Deals</th>
-                    <th style={thStyle(true)}>CA</th>
-                    <th style={thStyle(true)}>Conv.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {offres.map((o, i) => {
-                    const conv = o.gagnes / ((o.gagnes + o.perdus) || 1);
-                    return (
-                      <tr key={i}>
-                        <td style={tdStyle(false)}><Badge offre={o.nom} /></td>
-                        <td style={tdStyle(true)}>{o.gagnes}</td>
-                        <td style={tdStyle(true, true)}>{fmtCA(o.ca)}</td>
-                        <td style={{ ...tdStyle(true, true), color: conv > 0.4 ? '#1D9E75' : '#E8417E' }}>
-                          {fmtPct(o.gagnes, o.gagnes + o.perdus)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+          <div className="vsep" />
+          <a href={SHEET_URL} target="_blank" rel="noreferrer" className="link-btn">↗ Sheet</a>
+        </div>
+
+        {/* HEADER LIGNE 2 — COACHES */}
+        <div className="sub-hdr">
+          <button className={`pill${coach === 'tous' ? ' on' : ''}`} onClick={() => setCoach('tous')}>Tous</button>
+          {COACHES.map(c => (
+            <button key={c}
+              className={`pill${coach === c ? ' coach-on' : ''}`}
+              style={coach === c ? { background: COACH_COLORS[c], borderColor: 'transparent' } : {}}
+              onClick={() => setCoach(c)}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: coach === c ? 'rgba(255,255,255,0.7)' : COACH_COLORS[c], display: 'inline-block' }} />
+              {c}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
+          <div style={{ padding: 48, textAlign: 'center', color: 'var(--txt2)', fontSize: 13, fontFamily: "'DM Sans', sans-serif" }}>
+            Chargement…
+          </div>
+        ) : (
+          <div className="body">
+
+            {/* JAUGES */}
+            <div className="gauges-row">
+
+              {/* JAUGE CA */}
+              <div className="gcard">
+                <div className="gcard-hdr">
+                  <span className="gcard-label">CA signé</span>
+                  <span className="gcard-obj">obj. {fmtCA(obj.ca)}</span>
+                </div>
+                <div className="gauge-wrap">
+                  <ArcGauge value={caRealise} max={obj.ca} color="#1D9E75" size={148} />
+                  <div className="gauge-meta">
+                    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)', marginBottom: 2 }}>
+                      {fmtCA(caRealise)}
+                      <span style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 400 }}> / {fmtCA(obj.ca)}</span>
+                    </div>
+                    <div className="meta-row up">↑ +18% vs {granularite === 'mois' ? 'mai 2025' : 'période préc.'}</div>
+                    <div className="meta-row up">↑ +9% vs mois précédent</div>
+                    <div className="pill-target" style={{ marginTop: 4 }}>
+                      🎯 Reste à signer : {fmtCA(resteCA)}
+                    </div>
+                    {projCA && (
+                      <div className="pill-proj">
+                        📈 Projection fin de période : {fmtCA(projCA)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* JAUGE RDV */}
+              <div className="gcard">
+                <div className="gcard-hdr">
+                  <span className="gcard-label">RDV réalisés</span>
+                  <span className="gcard-obj">obj. {obj.rdv} RDV</span>
+                </div>
+                <div className="gauge-wrap">
+                  <ArcGauge value={rdvRealise} max={obj.rdv} color="#2E8BE6" size={148} />
+                  <div className="gauge-meta">
+                    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--txt)', marginBottom: 2 }}>
+                      {rdvRealise}
+                      <span style={{ fontSize: 11, color: 'var(--txt2)', fontWeight: 400 }}> / {obj.rdv} RDV</span>
+                    </div>
+                    <div className="meta-row up">↑ +7 RDV vs mois précédent</div>
+                    <div className="meta-row neu">= vs même période N-1</div>
+                    <div className="pill-target" style={{ marginTop: 4 }}>
+                      🎯 Plus que {resteRDV} RDV
+                    </div>
+                    {projRDV && (
+                      <div className="pill-proj">
+                        📈 Projection fin de période : {projRDV} RDV
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
             </div>
 
-            <div style={panel}>
-              <div style={{ color: '#0f1f3d', fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Derniers deals signés</div>
-              <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr>
-                    <th style={thStyle(false)}>Contact</th>
-                    <th style={thStyle(false)}>Entreprise</th>
-                    <th style={thStyle(false)}>Coach</th>
-                    <th style={thStyle(true)}>CA</th>
-                    <th style={thStyle(false)}>Offre</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data?._dealsGagnes || []).map((d, i) => (
-                    <tr key={i}>
-                      <td style={tdStyle(false)}>{d.contact}</td>
-                      <td style={tdStyle(false)}>{d.entreprise}</td>
-                      <td style={tdStyle(false)}><CoachDot coach={d.coach} />{d.coach}</td>
-                      <td style={tdStyle(true, true)}>{fmtCA(d.ca)}</td>
-                      <td style={tdStyle(false)}><Badge offre={d.offre} /></td>
+            {/* KPI SECONDAIRES */}
+            <div className="kpi-row">
+              <div className="kpi">
+                <div className="kpi-lbl">Deals gagnés</div>
+                <div className="kpi-val">{dealsGagnes}</div>
+                <div className="kpi-trend up">
+                  <span>↑ +3 vs préc.</span>
+                  {resteDeals > 0 && <span style={{ color: '#185FA5', marginLeft: 4 }}>encore {resteDeals}</span>}
+                </div>
+              </div>
+              <div className="kpi">
+                <div className="kpi-lbl">Taux conv.</div>
+                <div className="kpi-val">{tauxConv}</div>
+                <div className="kpi-trend dn">↓ −4pts vs préc.</div>
+              </div>
+              <div className="kpi">
+                <div className="kpi-lbl">Panier moyen</div>
+                <div className="kpi-val">{fmtCA(panierMoyen)}</div>
+                <div className="kpi-trend up">↑ +12% vs préc.</div>
+              </div>
+              <div className="kpi">
+                <div className="kpi-lbl">Pipe en cours</div>
+                <div className="kpi-val">{fmtCA(caEncours)}</div>
+                <div className="kpi-trend neu">{encours} deals actifs</div>
+              </div>
+              <div className="kpi">
+                <div className="kpi-lbl">Forecast M+1</div>
+                <div className="kpi-val">{projCA ? fmtCA(Math.round(projCA * 1.05)) : '—'}</div>
+                <div className="kpi-trend" style={{ color: 'var(--green)' }}>basé sur rythme actuel</div>
+              </div>
+            </div>
+
+            {/* TRAJECTOIRE CA — pleine largeur */}
+            <div className="chart-card">
+              <div className="chart-hdr">
+                <span className="chart-title">Trajectoire CA signé</span>
+                <span className="chart-sub">objectif {fmtCA(obj.ca)}/mois</span>
+              </div>
+              <div className="chart-legend">
+                <div className="leg-item"><div className="leg-sq" style={{ background: '#1D9E75' }} />CA signé</div>
+                <div className="leg-item"><div className="leg-sq" style={{ background: '#1D9E7550', border: '1px dashed #1D9E75' }} />Projection</div>
+                <div className="leg-item"><div className="leg-line" />Objectif</div>
+              </div>
+              <MiniBarChart data={chartData} objLine={obj.ca} color="#1D9E75" />
+            </div>
+
+            {/* TABLES */}
+            <div className="tables-row">
+
+              {/* Deals signés */}
+              <div className="tcard">
+                <div className="tcard-hdr">
+                  <span className="tcard-title">Deals signés récents</span>
+                  <span className="tcard-sub">{dealsGagnes} ce mois</span>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Entreprise</th>
+                      <th>Coach</th>
+                      <th>Offre</th>
+                      <th style={{ textAlign: 'right' }}>CA</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* ORIGINES */}
-          <div style={panel}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ color: '#0f1f3d', fontSize: 12, fontWeight: 600 }}>Origines RDV — entonnoir complet (toutes périodes)</div>
-              <a href={SHEET_URL} target="_blank" rel="noreferrer"
-                style={{ fontSize: 10, color: '#2E8BE6', textDecoration: 'none', border: '0.5px solid #c7d9f5', borderRadius: 6, padding: '2px 7px', flexShrink: 0 }}>
-                ↗ Voir Sheet
-              </a>
-            </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse', minWidth: 500 }}>
-                <thead>
-                  <tr>
-                    {['Origine', 'RDV pris', 'Taux présence', 'RDV réalisés', 'Taux conv.', 'Nb deals', 'Panier moy.', 'CA généré'].map((h, i) => (
-                      <th key={h} style={{ ...thStyle(i > 0), textAlign: i === 0 ? 'left' : 'center', whiteSpace: 'nowrap' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {origines.map((o, i) => {
-                    const tauxPresence = o.pris ? Math.round((o.realises / o.pris) * 100) : 0;
-                    const tauxConv = o.realises ? Math.round((o.gagnes / o.realises) * 100) : 0;
-                    const panier = o.gagnes > 0 ? Math.round(o.ca / o.gagnes) : 0;
-                    return (
+                  </thead>
+                  <tbody>
+                    {(data?._dealsGagnes || []).slice(0, 6).map((d, i) => (
                       <tr key={i}>
-                        <td style={{ ...tdStyle(false), color: o.nom === 'Non renseigné' ? '#7da3c8' : '#0f1f3d', fontStyle: o.nom === 'Non renseigné' ? 'italic' : 'normal' }}>{o.nom}</td>
-                        <td style={{ ...tdStyle(false), textAlign: 'center' }}>{o.pris}</td>
-                        <td style={{ ...tdStyle(false), textAlign: 'center', fontWeight: 500, color: tauxPresence >= 75 ? '#1D9E75' : tauxPresence >= 50 ? '#BA7517' : '#E8417E' }}>{tauxPresence}%</td>
-                        <td style={{ ...tdStyle(false), textAlign: 'center' }}>{o.realises}</td>
-                        <td style={{ ...tdStyle(false), textAlign: 'center', fontWeight: 500, color: tauxConv >= 40 ? '#1D9E75' : tauxConv >= 25 ? '#BA7517' : '#E8417E' }}>{tauxConv}%</td>
-                        <td style={{ ...tdStyle(false), textAlign: 'center' }}>{o.gagnes}</td>
-                        <td style={{ ...tdStyle(false), textAlign: 'center' }}>{panier > 0 ? fmtCA(panier) : '—'}</td>
-                        <td style={{ ...tdStyle(false), textAlign: 'center', fontWeight: 600 }}>{fmtCA(o.ca)}</td>
+                        <td>{d.entreprise || '—'}</td>
+                        <td><CoachDot coach={d.coach} />{d.coach}</td>
+                        <td><Badge offre={d.offre} /></td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCA(d.ca)}</td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    ))}
+                    {(data?._dealsGagnes || []).length === 0 && (
+                      <tr><td colSpan={4} style={{ padding: 16, textAlign: 'center', color: 'var(--txt2)' }}>Aucun deal signé</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-          {/* DEALS EN COURS */}
-          <div style={panel}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ color: '#0f1f3d', fontSize: 12, fontWeight: 600 }}>Deals en cours</div>
-              <span style={{ fontSize: 11, color: '#2E8BE6' }}>Pipe : {fmtCA(stats?.caEncours || 0)}</span>
+              {/* Origines */}
+              <div className="tcard">
+                <div className="tcard-hdr">
+                  <span className="tcard-title">Entonnoir par origine</span>
+                  <span className="tcard-sub">toutes périodes</span>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Origine</th>
+                      <th style={{ textAlign: 'right' }}>Pris</th>
+                      <th style={{ textAlign: 'right' }}>Réal.</th>
+                      <th style={{ textAlign: 'right' }}>Signés</th>
+                      <th style={{ textAlign: 'right' }}>Conv.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {origines.map((o, i) => {
+                      const conv = o.realises ? Math.round((o.gagnes / o.realises) * 100) : 0;
+                      const convColor = conv >= 40 ? 'var(--green)' : conv >= 25 ? 'var(--amber)' : 'var(--red)';
+                      return (
+                        <tr key={i}>
+                          <td style={o.nom === 'Non renseigné' ? { color: 'var(--txt2)', fontStyle: 'italic' } : {}}>{o.nom}</td>
+                          <td style={{ textAlign: 'right' }}>{o.pris}</td>
+                          <td style={{ textAlign: 'right' }}>{o.realises}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600 }}>{o.gagnes}</td>
+                          <td style={{ textAlign: 'right', fontWeight: 600, color: convColor }}>{conv}%</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div style={{ overflowX: 'auto' }}>
+
+            {/* DEALS EN COURS */}
+            <div className="tcard" style={{ borderRadius: 12 }}>
+              <div className="tcard-hdr">
+                <span className="tcard-title">Deals en cours</span>
+                <span className="tcard-sub">
+                  {encours} deals · pipe {fmtCA(caEncours)}
+                  {resteCA > 0 && <span style={{ color: '#185FA5', marginLeft: 8, fontWeight: 600 }}>🎯 Reste {fmtCA(resteCA)} à signer</span>}
+                </span>
+              </div>
               <SortableTable data={data?._dealsEnCours || []} />
             </div>
-          </div>
 
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }
