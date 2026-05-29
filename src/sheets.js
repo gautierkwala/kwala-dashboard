@@ -33,18 +33,14 @@ function parseDate(str) {
   return { month: m, year: y };
 }
 
-// periode: 'ytd' | 't1' | 't2' | 'mois_YYYYMM' | 'mois_prec_YYYYMM'
 function matchesPeriode(dateStr, periode) {
   const d = parseDate(dateStr);
   const now = new Date();
   const curM = now.getMonth(), curY = now.getFullYear();
-
   if (!d) return periode === 'ytd';
-
   if (periode === 'ytd') return d.year === curY;
   if (periode === 't1')  return d.year === curY && d.month >= 0 && d.month <= 2;
   if (periode === 't2')  return d.year === curY && d.month >= 3 && d.month <= 5;
-
   if (periode.startsWith('mois_prec_')) {
     const ref = periode.replace('mois_prec_', '');
     const y = parseInt(ref.slice(0, 4)), m = parseInt(ref.slice(4)) - 1;
@@ -52,23 +48,22 @@ function matchesPeriode(dateStr, periode) {
     const py = m === 0 ? y - 1 : y;
     return d.month === pm && d.year === py;
   }
-
   if (periode.startsWith('mois_')) {
     const ref = periode.replace('mois_', '');
     const y = parseInt(ref.slice(0, 4)), m = parseInt(ref.slice(4)) - 1;
     return d.month === m && d.year === y;
   }
-
   return true;
 }
 
 export async function fetchRDVData(periode = 'mois_202605') {
   try {
-    const rows = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Liste des rendez-vous Equipe!A2:P300');
+    // Colonne A→Q = index 0→16
+    const rows = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Liste des rendez-vous Equipe!A2:Q300');
     const coaches = ['Alexis', 'Gautier', 'Mathilde', 'Jenny', 'Rémi'];
 
     function empty() {
-      return { rdv: 0, gagnes: 0, encours: 0, perdus: 0, noshow: 0, ca: 0, caEncours: 0, prescripteurCA: 0, rdvPris: 0 };
+      return { rdv: 0, gagnes: 0, encours: 0, perdus: 0, noshow: 0, ca: 0, caEncours: 0, prescripteurCA: 0 };
     }
 
     const result = { tous: empty() };
@@ -77,24 +72,28 @@ export async function fetchRDVData(periode = 'mois_202605') {
 
     const dealsGagnes  = [];
     const dealsEnCours = [];
-    const originesMap  = {}; // toutes origines, sans filtre
-    const offresMap    = {}; // { offre: { gagnes, perdus, ca } } — filtré période
+    const originesMap  = {};
+    const offresMap    = {};
 
-    const precPeriode = 'mois_prec_' + periode.replace('mois_', '');
+    const precPeriode = periode.startsWith('mois_') ? 'mois_prec_' + periode.replace('mois_', '') : null;
 
     rows.forEach(row => {
-      const prisPar    = row[0]?.trim();
-      const origine    = row[1]?.trim() || 'Non renseigné';
-      const entreprise = row[2]?.trim();
-      const contact    = row[3]?.trim();
-      const dateRDV    = row[5]?.trim();
-      const rdvFaitPar = row[6]?.trim();
-      const statut     = row[8]?.trim();
-      const resultat   = row[9]?.trim();
-      const dateSign   = row[10]?.trim(); // colonne K — date de signature
-      const offre      = row[11]?.trim() || 'Non défini';
-      const caEst      = parseAmount(row[12]);
-      const ca         = parseAmount(row[13]);
+      // ── Index corrigés après ajout colonne E ──
+      const prisPar    = row[0]?.trim();   // A
+      const origine    = row[1]?.trim() || 'Non renseigné'; // B
+      const entreprise = row[2]?.trim();   // C
+      const contact    = row[3]?.trim();   // D
+      // E (index 4) = email, ignoré
+      // F (index 5) = Date prise de RDV, ignoré
+      const dateRDV    = row[6]?.trim();   // G
+      const rdvFaitPar = row[7]?.trim();   // H
+      // I (index 8) = Période, ignoré
+      const statut     = row[9]?.trim();   // J
+      const resultat   = row[10]?.trim();  // K
+      const dateSign   = row[11]?.trim();  // L — Date Statut (signature)
+      const offre      = row[12]?.trim() || 'Non défini'; // M
+      const caEst      = parseAmount(row[13]); // N
+      const ca         = parseAmount(row[14]); // O
 
       if (!prisPar) return;
       const coach = coaches.find(c => rdvFaitPar === c) || coaches.find(c => prisPar === c);
@@ -112,27 +111,24 @@ export async function fetchRDVData(periode = 'mois_202605') {
         dealsEnCours.push({ entreprise, contact, coach: rdvFaitPar || prisPar, date: dateRDV, offre, caEst });
       }
 
-      // ── Mois précédent (pour delta) — basé sur date signature pour gagnés, dateRDV sinon ──
-      const datePrecRef = resultat === 'Gagné' ? (dateSign || dateRDV) : dateRDV;
-      if (periode.startsWith('mois_') && !periode.startsWith('mois_prec_') && matchesPeriode(datePrecRef, precPeriode)) {
-        if (statut === 'No show') {
-          resultPrec.tous.noshow++; resultPrec[coach].noshow++;
-        } else if (statut === 'Réalisé') {
-          resultPrec.tous.rdv++; resultPrec[coach].rdv++;
-          if (resultat === 'Gagné') { resultPrec.tous.gagnes++; resultPrec.tous.ca += ca; resultPrec[coach].gagnes++; resultPrec[coach].ca += ca; }
-          else if (resultat === 'Perdu') { resultPrec.tous.perdus++; resultPrec[coach].perdus++; }
+      // ── Mois précédent (delta) ──
+      if (precPeriode) {
+        const datePrecRef = resultat === 'Gagné' ? (dateSign || dateRDV) : dateRDV;
+        if (matchesPeriode(datePrecRef, precPeriode)) {
+          if (statut === 'No show') {
+            resultPrec.tous.noshow++; resultPrec[coach].noshow++;
+          } else if (statut === 'Réalisé') {
+            resultPrec.tous.rdv++; resultPrec[coach].rdv++;
+            if (resultat === 'Gagné')  { resultPrec.tous.gagnes++; resultPrec.tous.ca += ca; resultPrec[coach].gagnes++; resultPrec[coach].ca += ca; }
+            if (resultat === 'Perdu')  { resultPrec.tous.perdus++; resultPrec[coach].perdus++; }
+          }
         }
       }
 
       // ── Période courante ──
-      // Pour les gagnés : on filtre sur date signature (col K)
-      // Pour les autres : on filtre sur date RDV
       const dateRef = resultat === 'Gagné' ? (dateSign || dateRDV) : dateRDV;
       if (!matchesPeriode(dateRef, periode)) return;
-
-      if (statut === 'No show') {
-        result.tous.noshow++; result[coach].noshow++; return;
-      }
+      if (statut === 'No show') { result.tous.noshow++; result[coach].noshow++; return; }
       if (statut !== 'Réalisé') return;
 
       result.tous.rdv++; result[coach].rdv++;
@@ -144,6 +140,9 @@ export async function fetchRDVData(periode = 'mois_202605') {
         if (!offresMap[offre]) offresMap[offre] = { gagnes: 0, perdus: 0, ca: 0 };
         offresMap[offre].gagnes++; offresMap[offre].ca += ca;
         dealsGagnes.push({ entreprise, contact, coach: rdvFaitPar || prisPar, ca, date: dateSign || dateRDV, offre });
+      } else if (resultat === 'En cours') {
+        result.tous.encours++; result[coach].encours++;
+        result.tous.caEncours += caEst; result[coach].caEncours += caEst;
       } else if (resultat === 'Perdu') {
         result.tous.perdus++; result[coach].perdus++;
         if (!offresMap[offre]) offresMap[offre] = { gagnes: 0, perdus: 0, ca: 0 };
@@ -170,7 +169,6 @@ export async function fetchRDVData(periode = 'mois_202605') {
   }
 }
 
-// 4 cols/mois : col 0=label, Signé=1+moisIndex*4
 async function fetchRemuneration(sheetId) {
   try {
     const rows = await fetchSheet(sheetId, 'NEW version!A1:BZ10');
