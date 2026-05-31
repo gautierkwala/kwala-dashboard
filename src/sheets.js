@@ -34,7 +34,6 @@ function matchesPeriode(dateStr, periodeKey) {
   if (!d) return false;
   const now = new Date();
   const curY = now.getFullYear();
-
   if (periodeKey === 'ytd') return d.year === curY;
   if (periodeKey.startsWith('t')) {
     const t = parseInt(periodeKey[1]) - 1;
@@ -68,7 +67,12 @@ export function getPrecPeriode(periodeKey) {
 }
 
 function emptyStats() {
-  return { rdv: 0, rdvPris: 0, gagnes: 0, encours: 0, perdus: 0, noshow: 0, ca: 0, caEncours: 0 };
+  return {
+    rdv: 0, rdvPris: 0,
+    gagnes: 0, gagnesPris: 0,
+    encours: 0, perdus: 0, noshow: 0,
+    ca: 0, caEncours: 0, caApporte: 0,
+  };
 }
 
 function isLast3Months(dateStr) {
@@ -76,8 +80,7 @@ function isLast3Months(dateStr) {
   if (!d) return false;
   const now = new Date();
   const limit = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  const dDate = new Date(d.year, d.month, 1);
-  return dDate >= limit;
+  return new Date(d.year, d.month, 1) >= limit;
 }
 
 export async function fetchRDVData(periodeKey, precPeriodeKey) {
@@ -110,11 +113,9 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
       const ca         = parseAmount(row[14]);
 
       if (!prisPar) return;
-      const coach = coaches.find(c => rdvFaitPar === c) || coaches.find(c => prisPar === c);
-      if (!coach) return;
-
-      // Coach qui a pris le RDV (pour Alexis & Rémi)
+      const coach     = coaches.find(c => rdvFaitPar === c) || coaches.find(c => prisPar === c);
       const coachPris = coaches.find(c => prisPar === c);
+      if (!coach) return;
 
       // Origines
       if (statut !== 'A venir') {
@@ -139,17 +140,23 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
       function accumulate(target, rdv, isGagne, isPerdu, isEnCours, isNoshow, caVal, caEstVal, pris) {
         if (isNoshow) { target.tous.noshow++; target[coach].noshow++; return; }
         if (rdv) {
-          target.tous.rdv++;
-          target[coach].rdv++;
-          // rdvPris : RDV pris par ce coach et réalisé
+          target.tous.rdv++; target[coach].rdv++;
+          if (pris && target[pris]) { target[pris].rdvPris++; target.tous.rdvPris++; }
+        }
+        if (isGagne) {
+          target.tous.gagnes++; target.tous.ca += caVal;
+          target[coach].gagnes++; target[coach].ca += caVal;
+          // CA et deals apportés = via prisPar
           if (pris && target[pris]) {
-            target[pris].rdvPris++;
-            target.tous.rdvPris++;
+            target[pris].gagnesPris++; target[pris].caApporte += caVal;
+            target.tous.gagnesPris++; target.tous.caApporte += caVal;
           }
         }
-        if (isGagne)   { target.tous.gagnes++; target.tous.ca += caVal; target[coach].gagnes++; target[coach].ca += caVal; }
         if (isPerdu)   { target.tous.perdus++; target[coach].perdus++; }
-        if (isEnCours) { target.tous.encours++; target.tous.caEncours += caEstVal; target[coach].encours++; target[coach].caEncours += caEstVal; }
+        if (isEnCours) {
+          target.tous.encours++; target.tous.caEncours += caEstVal;
+          target[coach].encours++; target[coach].caEncours += caEstVal;
+        }
       }
 
       // Période courante

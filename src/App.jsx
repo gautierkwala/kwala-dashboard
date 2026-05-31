@@ -14,17 +14,21 @@ const OFFRE_BADGE = {
 };
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/13r_qAdwCmtdriilX1nzL56r0eEaDX4fDw4vZx3pvfUM/edit';
 
-// Objectifs mensuels équipe
+// Coaches "apporteurs" — CA et deals comptés via prisPar
+const COACHES_APPORTEURS = ['Alexis', 'Rémi'];
+
 const OBJ_CA_EQUIPE    = 30000;
 const OBJ_RDV_EQUIPE   = 20;
-const OBJ_DEALS_MENSUEL = 12;
+const OBJ_DEALS_EQUIPE = 8;
 
-// Objectifs mensuels par coach
 const OBJ_CA_COACH = {
-  Mathilde: 15000, Jenny: 15000, Gautier: 10000, Alexis: 5000, Rémi: 0,
+  Mathilde: 15000, Jenny: 15000, Gautier: 10000, Alexis: 20000, Rémi: 20000,
 };
 const OBJ_RDV_COACH = {
   Jenny: 10, Mathilde: 10, Gautier: 10, Alexis: 20, Rémi: 20,
+};
+const OBJ_DEALS_COACH = {
+  Jenny: 4, Mathilde: 4, Gautier: 2, Alexis: 4, Rémi: 4,
 };
 
 function getObjectifs(granularite, coach) {
@@ -33,14 +37,11 @@ function getObjectifs(granularite, coach) {
   if (granularite === 'trimestre') factor = 3;
   else if (granularite === 'ytd') factor = now.getMonth() + 1;
 
-  const caBase  = coach !== 'tous' ? (OBJ_CA_COACH[coach]  ?? OBJ_CA_EQUIPE)  : OBJ_CA_EQUIPE;
-  const rdvBase = coach !== 'tous' ? (OBJ_RDV_COACH[coach] ?? OBJ_RDV_EQUIPE) : OBJ_RDV_EQUIPE;
+  const caBase    = coach !== 'tous' ? (OBJ_CA_COACH[coach]    ?? OBJ_CA_EQUIPE)    : OBJ_CA_EQUIPE;
+  const rdvBase   = coach !== 'tous' ? (OBJ_RDV_COACH[coach]   ?? OBJ_RDV_EQUIPE)   : OBJ_RDV_EQUIPE;
+  const dealsBase = coach !== 'tous' ? (OBJ_DEALS_COACH[coach] ?? OBJ_DEALS_EQUIPE) : OBJ_DEALS_EQUIPE;
 
-  return {
-    ca:    caBase  * factor,
-    rdv:   rdvBase * factor,
-    deals: OBJ_DEALS_MENSUEL * factor,
-  };
+  return { ca: caBase * factor, rdv: rdvBase * factor, deals: dealsBase * factor };
 }
 
 function getPeriodeKey(granularite, year, month) {
@@ -79,9 +80,16 @@ function fmtDelta(curr, prev, isCA = false) {
   if (prev == null || prev === 0) return null;
   const diff = curr - prev;
   const pct  = Math.round((diff / prev) * 100);
-  const sign  = diff >= 0 ? '+' : '';
+  const sign = diff >= 0 ? '+' : '';
   if (isCA) return { label: `${sign}${fmtCA(diff)} vs période préc.`, up: diff >= 0 };
   return { label: `${sign}${diff} (${sign}${pct}%) vs période préc.`, up: diff >= 0 };
+}
+
+function getGaugeColor(pct) {
+  if (pct >= 1)   return '#1D9E75';
+  if (pct >= 0.8) return '#2E8BE6';
+  if (pct >= 0.5) return '#BA7517';
+  return '#E24B4A';
 }
 
 const CSS = `
@@ -120,18 +128,19 @@ const CSS = `
   .vsep { width: 0.5px; height: 16px; background: var(--bdr); flex-shrink: 0; }
 
   .gauges-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .gcard { background: var(--surface); border: 0.5px solid var(--bdr); border-radius: 12px; padding: 14px 16px; }
-  .gcard-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
-  .gcard-label { font-size: 11px; font-weight: 500; color: var(--txt2); }
+  .gcard { background: var(--surface); border: 0.5px solid var(--bdr); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; }
+  .gcard-hdr { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+  .gcard-label { font-size: 11px; font-weight: 600; color: var(--txt); }
+  .gcard-sub { font-size: 10px; color: var(--txt3); margin-top: 1px; }
   .gcard-obj { font-size: 11px; color: var(--txt3); }
-  .gauge-wrap { display: flex; align-items: center; gap: 14px; }
-  .gauge-meta { flex: 1; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-  .gauge-main-val { font-size: 16px; font-weight: 600; color: var(--txt); }
-  .gauge-main-sub { font-size: 11px; color: var(--txt2); margin-bottom: 2px; }
-  .meta-row { font-size: 11px; display: flex; align-items: center; gap: 4px; }
+  .gauge-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; flex: 1; }
+  .gauge-meta { width: 100%; display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center; }
+  .gauge-main-val { font-size: 18px; font-weight: 600; color: var(--txt); }
+  .gauge-main-sub { font-size: 11px; color: var(--txt2); }
+  .meta-row { font-size: 11px; display: flex; align-items: center; gap: 4px; justify-content: center; }
   .up { color: var(--green); } .dn { color: var(--red); } .neu { color: var(--txt2); }
-  .pill-target { background: #E6F1FB; color: #0C447C; border-radius: 7px; padding: 5px 9px; font-size: 11px; font-weight: 600; margin-top: 3px; }
-  .pill-proj { background: #E1F5EE; color: #085041; border-radius: 7px; padding: 5px 9px; font-size: 11px; font-weight: 500; }
+  .pill-target { background: #E6F1FB; color: #0C447C; border-radius: 7px; padding: 5px 9px; font-size: 11px; font-weight: 600; text-align: center; }
+  .pill-proj { background: #E1F5EE; color: #085041; border-radius: 7px; padding: 5px 9px; font-size: 11px; font-weight: 500; text-align: center; }
 
   .kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
   .kpi { background: var(--surface); border: 0.5px solid var(--bdr); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; align-items: center; text-align: center; }
@@ -157,35 +166,27 @@ const CSS = `
   @media (max-width: 680px) {
     .gauges-row, .tables-row { grid-template-columns: 1fr; }
     .kpi-row { grid-template-columns: repeat(2, 1fr); }
-    .gauge-wrap { flex-direction: column; align-items: flex-start; }
     .hdr, .sub-hdr { padding: 0 12px; }
     .nav-btn { min-width: 36px; min-height: 36px; }
   }
 `;
 
-function getGaugeColor(pct) {
-  if (pct >= 1)    return '#1D9E75'; // vert — objectif atteint
-  if (pct >= 0.8)  return '#2E8BE6'; // bleu — proche
-  if (pct >= 0.5)  return '#BA7517'; // amber — en cours
-  return '#E24B4A';                  // rouge — loin
-}
-
-function ArcGauge({ value, max, size = 148 }) {
+function ArcGauge({ value, max, size = 160 }) {
   const rawPct = value / (max || 1);
   const pct    = Math.min(rawPct, 1);
   const color  = getGaugeColor(rawPct);
-  const r   = size / 2 - 13;
+  const r   = size / 2 - 14;
   const cx  = size / 2;
   const cy  = Math.round(size * 0.57);
   const arc = Math.PI * r;
   return (
-    <svg width={size} height={Math.round(size * 0.6)} viewBox={`0 0 ${size} ${Math.round(size * 0.6)}`} aria-hidden="true" style={{ flexShrink: 0 }}>
-      <path d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} fill="none" stroke="rgba(0,0,0,0.07)" strokeWidth="11" strokeLinecap="round" />
-      <path d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} fill="none" stroke={color} strokeWidth="11" strokeLinecap="round"
+    <svg width={size} height={Math.round(size * 0.62)} viewBox={`0 0 ${size} ${Math.round(size * 0.62)}`} aria-hidden="true">
+      <path d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} fill="none" stroke="rgba(0,0,0,0.07)" strokeWidth="12" strokeLinecap="round" />
+      <path d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} fill="none" stroke={color} strokeWidth="12" strokeLinecap="round"
         strokeDasharray={arc} strokeDashoffset={arc * (1 - pct)}
         style={{ transition: 'stroke-dashoffset 0.7s cubic-bezier(.4,0,.2,1)' }} />
-      <text x={cx} y={cy - 4} textAnchor="middle"
-        style={{ fill: rawPct >= 1 ? color : 'var(--txt)', fontSize: 21, fontWeight: 600, fontFamily: 'DM Sans, sans-serif' }}>
+      <text x={cx} y={cy - 5} textAnchor="middle"
+        style={{ fill: rawPct >= 1 ? color : 'var(--txt)', fontSize: 22, fontWeight: 600, fontFamily: 'DM Sans, sans-serif' }}>
         {Math.round(rawPct * 100)}%
       </text>
     </svg>
@@ -205,12 +206,12 @@ function DealsEnCoursTable({ data }) {
   const [sortCol, setSortCol] = useState(3);
   const [sortDir, setSortDir] = useState(-1);
   const cols = [
-    { label: 'Contact',    key: 'contact' },
-    { label: 'Entreprise', key: 'entreprise' },
-    { label: 'Coach',      key: 'coach' },
+    { label: 'Contact',   key: 'contact' },
+    { label: 'Entreprise',key: 'entreprise' },
+    { label: 'Coach',     key: 'coach' },
     { label: 'Date RDV',  key: 'date' },
-    { label: 'Offre',      key: 'offre' },
-    { label: 'CA est.',    key: 'caEst', right: true },
+    { label: 'Offre',     key: 'offre' },
+    { label: 'CA est.',   key: 'caEst', right: true },
   ];
   const sorted = useMemo(() => [...(data || [])].sort((a, b) => {
     const k = cols[sortCol].key;
@@ -262,6 +263,7 @@ export default function App() {
   const [data, setData]               = useState(null);
   const [loading, setLoading]         = useState(true);
 
+  const isApporteur    = COACHES_APPORTEURS.includes(coach);
   const periodeKey     = getPeriodeKey(granularite, year, month);
   const precPeriodeKey = getPrecPeriode(periodeKey);
   const obj            = getObjectifs(granularite, coach);
@@ -281,21 +283,17 @@ export default function App() {
     return (coach !== 'tous' && data._prec[coach]) ? data._prec[coach] : data._prec['tous'];
   }, [data, coach]);
 
-  const prevMonth = () => {
-    if (month === 0) { setMonth(11); setYear(y => y - 1); }
-    else setMonth(m => m - 1);
-  };
-  const nextMonth = () => {
-    if (month === 11) { setMonth(0); setYear(y => y + 1); }
-    else setMonth(m => m + 1);
-  };
+  const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); };
+  const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); };
 
-  const caRealise   = stats?.ca || 0;
-  const rdvRealise  = (['Alexis','Rémi'].includes(coach) ? stats?.rdvPris : stats?.rdv) || 0;
-  const dealsGagnes = stats?.gagnes || 0;
+  // Valeurs selon profil apporteur ou réalisateur
+  const caRealise   = (isApporteur ? stats?.caApporte   : stats?.ca)       || 0;
+  const rdvRealise  = (isApporteur ? stats?.rdvPris      : stats?.rdv)      || 0;
+  const dealsGagnes = (isApporteur ? stats?.gagnesPris   : stats?.gagnes)   || 0;
+
   const caEncours   = stats?.caEncours || 0;
-  const encours     = stats?.encours || 0;
-  const perdus      = stats?.perdus || 0;
+  const encours     = stats?.encours   || 0;
+  const perdus      = stats?.perdus    || 0;
   const panierMoyen = dealsGagnes > 0 ? Math.round(caRealise / dealsGagnes) : 0;
   const tauxConv    = fmtPct(dealsGagnes, dealsGagnes + perdus);
 
@@ -306,12 +304,16 @@ export default function App() {
   const resteRDV   = Math.max(0, obj.rdv - rdvRealise);
   const resteDeals = Math.max(0, obj.deals - dealsGagnes);
 
-  const deltaCA    = fmtDelta(caRealise, precStats?.ca, true);
-  const deltaRDV   = fmtDelta(rdvRealise, precStats?.rdv, false);
-  const deltaDeals = fmtDelta(dealsGagnes, precStats?.gagnes, false);
+  const precCA    = isApporteur ? precStats?.caApporte  : precStats?.ca;
+  const precRDV   = isApporteur ? precStats?.rdvPris    : precStats?.rdv;
+  const precDeals = isApporteur ? precStats?.gagnesPris : precStats?.gagnes;
+
+  const deltaCA    = fmtDelta(caRealise, precCA, true);
+  const deltaRDV   = fmtDelta(rdvRealise, precRDV, false);
+  const deltaDeals = fmtDelta(dealsGagnes, precDeals, false);
   const deltaConv  = precStats ? (() => {
     const curr = dealsGagnes / ((dealsGagnes + perdus) || 1) * 100;
-    const prev  = precStats.gagnes / ((precStats.gagnes + precStats.perdus) || 1) * 100;
+    const prev  = (precStats.gagnes || 0) / (((precStats.gagnes || 0) + (precStats.perdus || 0)) || 1) * 100;
     const diff  = Math.round(curr - prev);
     if (!precStats.gagnes && !precStats.perdus) return null;
     return { label: `${diff >= 0 ? '+' : ''}${diff}pts vs période préc.`, up: diff >= 0 };
@@ -323,6 +325,11 @@ export default function App() {
   }, [data]);
 
   const monthLabel = getMonthLabel(year, month, granularite);
+
+  // Titres dynamiques
+  const titreCA    = isApporteur ? 'CA généré — RDV apportés'     : 'CA signé — RDV réalisés';
+  const titreRDV   = isApporteur ? 'RDV apportés & réalisés'       : 'RDV réalisés';
+  const titreDeals = isApporteur ? 'Deals signés — RDV apportés'   : 'Deals signés — RDV réalisés';
 
   const Delta = ({ d }) => {
     if (!d) return <span className="neu">— pas de données préc.</span>;
@@ -377,7 +384,10 @@ export default function App() {
               <div className="gauges-row">
                 <div className="gcard">
                   <div className="gcard-hdr">
-                    <span className="gcard-label">CA signé</span>
+                    <div>
+                      <div className="gcard-label">{titreCA}</div>
+                      {isApporteur && <div className="gcard-sub">via RDV apportés par {coach}</div>}
+                    </div>
                     <span className="gcard-obj">obj. {fmtCA(obj.ca)}</span>
                   </div>
                   <div className="gauge-wrap">
@@ -392,14 +402,17 @@ export default function App() {
                         ? <div className="pill-target" style={{ background: '#E1F5EE', color: '#085041' }}>🎉 Dépassé de {fmtCA(caRealise - obj.ca)} (+{Math.round(((caRealise - obj.ca) / obj.ca) * 100)}%)</div>
                         : <div className="pill-target">🎯 Reste à signer : {fmtCA(resteCA)}</div>
                       }
-                      {projCA && <div className="pill-proj">📈 Projection fin de période : {fmtCA(projCA)}</div>}
+                      {projCA && <div className="pill-proj">📈 Projection : {fmtCA(projCA)}</div>}
                     </div>
                   </div>
                 </div>
 
                 <div className="gcard">
                   <div className="gcard-hdr">
-                    <span className="gcard-label">RDV réalisés</span>
+                    <div>
+                      <div className="gcard-label">{titreRDV}</div>
+                      {isApporteur && <div className="gcard-sub">RDV pris par {coach} et réalisés</div>}
+                    </div>
                     <span className="gcard-obj">obj. {obj.rdv} RDV</span>
                   </div>
                   <div className="gauge-wrap">
@@ -414,7 +427,7 @@ export default function App() {
                         ? <div className="pill-target" style={{ background: '#E1F5EE', color: '#085041' }}>🎉 Dépassé de {rdvRealise - obj.rdv} RDV (+{Math.round(((rdvRealise - obj.rdv) / obj.rdv) * 100)}%)</div>
                         : <div className="pill-target">🎯 Plus que {resteRDV} RDV</div>
                       }
-                      {projRDV && <div className="pill-proj">📈 Projection fin de période : {projRDV} RDV</div>}
+                      {projRDV && <div className="pill-proj">📈 Projection : {projRDV} RDV</div>}
                     </div>
                   </div>
                 </div>
@@ -423,7 +436,7 @@ export default function App() {
               {/* KPI SECONDAIRES */}
               <div className="kpi-row">
                 <div className="kpi">
-                  <div className="kpi-lbl">Deals gagnés</div>
+                  <div className="kpi-lbl">{titreDeals}</div>
                   <div className="kpi-val">{dealsGagnes}</div>
                   <div className="kpi-trend">
                     <Delta d={deltaDeals} />
