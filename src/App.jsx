@@ -163,8 +163,17 @@ const CSS = `
   }
 `;
 
-function ArcGauge({ value, max, color, size = 148 }) {
-  const pct = Math.min(value / (max || 1), 1);
+function getGaugeColor(pct) {
+  if (pct >= 1)    return '#1D9E75'; // vert — objectif atteint
+  if (pct >= 0.8)  return '#2E8BE6'; // bleu — proche
+  if (pct >= 0.5)  return '#BA7517'; // amber — en cours
+  return '#E24B4A';                  // rouge — loin
+}
+
+function ArcGauge({ value, max, size = 148 }) {
+  const rawPct = value / (max || 1);
+  const pct    = Math.min(rawPct, 1);
+  const color  = getGaugeColor(rawPct);
   const r   = size / 2 - 13;
   const cx  = size / 2;
   const cy  = Math.round(size * 0.57);
@@ -176,8 +185,8 @@ function ArcGauge({ value, max, color, size = 148 }) {
         strokeDasharray={arc} strokeDashoffset={arc * (1 - pct)}
         style={{ transition: 'stroke-dashoffset 0.7s cubic-bezier(.4,0,.2,1)' }} />
       <text x={cx} y={cy - 4} textAnchor="middle"
-        style={{ fill: 'var(--txt)', fontSize: 21, fontWeight: 600, fontFamily: 'DM Sans, sans-serif' }}>
-        {Math.round(pct * 100)}%
+        style={{ fill: rawPct >= 1 ? color : 'var(--txt)', fontSize: 21, fontWeight: 600, fontFamily: 'DM Sans, sans-serif' }}>
+        {Math.round(rawPct * 100)}%
       </text>
     </svg>
   );
@@ -372,14 +381,17 @@ export default function App() {
                     <span className="gcard-obj">obj. {fmtCA(obj.ca)}</span>
                   </div>
                   <div className="gauge-wrap">
-                    <ArcGauge value={caRealise} max={obj.ca} color="#1D9E75" />
+                    <ArcGauge value={caRealise} max={obj.ca} />
                     <div className="gauge-meta">
                       <div>
                         <div className="gauge-main-val">{fmtCA(caRealise)}</div>
                         <div className="gauge-main-sub">sur {fmtCA(obj.ca)}</div>
                       </div>
                       <div className="meta-row"><Delta d={deltaCA} /></div>
-                      <div className="pill-target">🎯 Reste à signer : {fmtCA(resteCA)}</div>
+                      {caRealise >= obj.ca
+                        ? <div className="pill-target" style={{ background: '#E1F5EE', color: '#085041' }}>🎉 Dépassé de {fmtCA(caRealise - obj.ca)} (+{Math.round(((caRealise - obj.ca) / obj.ca) * 100)}%)</div>
+                        : <div className="pill-target">🎯 Reste à signer : {fmtCA(resteCA)}</div>
+                      }
                       {projCA && <div className="pill-proj">📈 Projection fin de période : {fmtCA(projCA)}</div>}
                     </div>
                   </div>
@@ -391,14 +403,17 @@ export default function App() {
                     <span className="gcard-obj">obj. {obj.rdv} RDV</span>
                   </div>
                   <div className="gauge-wrap">
-                    <ArcGauge value={rdvRealise} max={obj.rdv} color="#2E8BE6" />
+                    <ArcGauge value={rdvRealise} max={obj.rdv} />
                     <div className="gauge-meta">
                       <div>
                         <div className="gauge-main-val">{rdvRealise} RDV</div>
                         <div className="gauge-main-sub">sur {obj.rdv}</div>
                       </div>
                       <div className="meta-row"><Delta d={deltaRDV} /></div>
-                      <div className="pill-target">🎯 Plus que {resteRDV} RDV</div>
+                      {rdvRealise >= obj.rdv
+                        ? <div className="pill-target" style={{ background: '#E1F5EE', color: '#085041' }}>🎉 Dépassé de {rdvRealise - obj.rdv} RDV (+{Math.round(((rdvRealise - obj.rdv) / obj.rdv) * 100)}%)</div>
+                        : <div className="pill-target">🎯 Plus que {resteRDV} RDV</div>
+                      }
                       {projRDV && <div className="pill-proj">📈 Projection fin de période : {projRDV} RDV</div>}
                     </div>
                   </div>
