@@ -278,8 +278,8 @@ export default function App() {
 
   const precStats = useMemo(() => {
     if (!data?._prec) return null;
-    return data._prec['tous'];
-  }, [data]);
+    return (coach !== 'tous' && data._prec[coach]) ? data._prec[coach] : data._prec['tous'];
+  }, [data, coach]);
 
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1); }
@@ -291,7 +291,7 @@ export default function App() {
   };
 
   const caRealise   = stats?.ca || 0;
-  const rdvRealise  = stats?.rdv || 0;
+  const rdvRealise  = (['Alexis','Rémi'].includes(coach) ? stats?.rdvPris : stats?.rdv) || 0;
   const dealsGagnes = stats?.gagnes || 0;
   const caEncours   = stats?.caEncours || 0;
   const encours     = stats?.encours || 0;

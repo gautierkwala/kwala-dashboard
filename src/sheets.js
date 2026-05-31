@@ -29,18 +29,15 @@ function parseDate(str) {
   return { day: d, month: m, year: y };
 }
 
-// Retourne true si la date correspond à la période
 function matchesPeriode(dateStr, periodeKey) {
   const d = parseDate(dateStr);
   if (!d) return false;
   const now = new Date();
   const curY = now.getFullYear();
 
-  if (periodeKey === 'ytd') {
-    return d.year === curY;
-  }
+  if (periodeKey === 'ytd') return d.year === curY;
   if (periodeKey.startsWith('t')) {
-    const t = parseInt(periodeKey[1]) - 1; // 0-indexed trimestre
+    const t = parseInt(periodeKey[1]) - 1;
     return d.year === curY && Math.floor(d.month / 3) === t;
   }
   if (periodeKey.startsWith('mois_')) {
@@ -52,24 +49,17 @@ function matchesPeriode(dateStr, periodeKey) {
   return false;
 }
 
-// Calcule la période précédente du même type
 export function getPrecPeriode(periodeKey) {
-  const now = new Date();
-  const curY = now.getFullYear();
-
-  if (periodeKey === 'ytd') {
-    // YTD N-1 : même nb de mois mais année précédente → on ne compare pas (pas d'historique)
-    return null;
-  }
+  if (periodeKey === 'ytd') return null;
   if (periodeKey.startsWith('t')) {
     const t = parseInt(periodeKey[1]);
-    if (t === 1) return null; // pas de T0
+    if (t === 1) return null;
     return `t${t - 1}`;
   }
   if (periodeKey.startsWith('mois_')) {
     const ref = periodeKey.replace('mois_', '');
     const y = parseInt(ref.slice(0, 4));
-    const m = parseInt(ref.slice(4)) - 1; // 0-indexed
+    const m = parseInt(ref.slice(4)) - 1;
     const prevM = m === 0 ? 11 : m - 1;
     const prevY = m === 0 ? y - 1 : y;
     return `mois_${prevY}${String(prevM + 1).padStart(2, '0')}`;
@@ -78,10 +68,9 @@ export function getPrecPeriode(periodeKey) {
 }
 
 function emptyStats() {
-  return { rdv: 0, gagnes: 0, encours: 0, perdus: 0, noshow: 0, ca: 0, caEncours: 0 };
+  return { rdv: 0, rdvPris: 0, gagnes: 0, encours: 0, perdus: 0, noshow: 0, ca: 0, caEncours: 0 };
 }
 
-// Période des 3 derniers mois glissants
 function isLast3Months(dateStr) {
   const d = parseDate(dateStr);
   if (!d) return false;
@@ -96,16 +85,15 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
     const rows = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Liste des rendez-vous Equipe!A2:Q500');
     const coaches = ['Alexis', 'Gautier', 'Mathilde', 'Jenny', 'Rémi'];
 
-    // Stats indexées par coach + 'tous', pour période courante et précédente
     const result = { tous: emptyStats() };
     const prec   = { tous: emptyStats() };
     coaches.forEach(c => { result[c] = emptyStats(); prec[c] = emptyStats(); });
 
-    const dealsGagnes    = [];   // période courante
-    const dealsGagnes3m  = [];   // 3 derniers mois glissants
-    const dealsEnCours   = [];   // tous, pas de filtre période
-    const originesMap    = {};
-    const offresMap      = {};
+    const dealsGagnes   = [];
+    const dealsGagnes3m = [];
+    const dealsEnCours  = [];
+    const originesMap   = {};
+    const offresMap     = {};
 
     rows.forEach(row => {
       const prisPar    = row[0]?.trim();
@@ -125,7 +113,10 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
       const coach = coaches.find(c => rdvFaitPar === c) || coaches.find(c => prisPar === c);
       if (!coach) return;
 
-      // ── Origines (toutes périodes, hors "A venir") ──
+      // Coach qui a pris le RDV (pour Alexis & Rémi)
+      const coachPris = coaches.find(c => prisPar === c);
+
+      // Origines
       if (statut !== 'A venir') {
         if (!originesMap[origine]) originesMap[origine] = { pris: 0, realises: 0, gagnes: 0, ca: 0 };
         originesMap[origine].pris++;
@@ -135,26 +126,33 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         }
       }
 
-      // ── Deals en cours (toujours tout, indépendant de la période) ──
+      // Deals en cours
       if (statut === 'Réalisé' && resultat === 'En cours') {
         dealsEnCours.push({ entreprise, contact, coach: rdvFaitPar || prisPar, date: dateRDV, offre, caEst });
       }
 
-      // ── Deals signés 3 derniers mois glissants ──
+      // Deals signés 3 derniers mois
       if (statut === 'Réalisé' && resultat === 'Gagné' && isLast3Months(dateSign || dateRDV)) {
         dealsGagnes3m.push({ entreprise, contact, coach: rdvFaitPar || prisPar, ca, date: dateSign || dateRDV, offre });
       }
 
-      // ── Fonction helper pour accumuler les stats ──
-      function accumulate(target, rdv, isGagne, isPerdu, isEnCours, isNoshow, caVal, caEstVal) {
+      function accumulate(target, rdv, isGagne, isPerdu, isEnCours, isNoshow, caVal, caEstVal, pris) {
         if (isNoshow) { target.tous.noshow++; target[coach].noshow++; return; }
-        if (rdv) { target.tous.rdv++; target[coach].rdv++; }
+        if (rdv) {
+          target.tous.rdv++;
+          target[coach].rdv++;
+          // rdvPris : RDV pris par ce coach et réalisé
+          if (pris && target[pris]) {
+            target[pris].rdvPris++;
+            target.tous.rdvPris++;
+          }
+        }
         if (isGagne)   { target.tous.gagnes++; target.tous.ca += caVal; target[coach].gagnes++; target[coach].ca += caVal; }
         if (isPerdu)   { target.tous.perdus++; target[coach].perdus++; }
         if (isEnCours) { target.tous.encours++; target.tous.caEncours += caEstVal; target[coach].encours++; target[coach].caEncours += caEstVal; }
       }
 
-      // ── Période courante ──
+      // Période courante
       const dateRef = resultat === 'Gagné' ? (dateSign || dateRDV) : dateRDV;
       if (matchesPeriode(dateRef, periodeKey)) {
         const isNoshow  = statut === 'No show';
@@ -163,7 +161,7 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         const isPerdu   = isRealise && resultat === 'Perdu';
         const isEnCours = isRealise && resultat === 'En cours';
 
-        accumulate(result, isRealise, isGagne, isPerdu, isEnCours, isNoshow, ca, caEst);
+        accumulate(result, isRealise, isGagne, isPerdu, isEnCours, isNoshow, ca, caEst, coachPris);
 
         if (isGagne) {
           if (!offresMap[offre]) offresMap[offre] = { gagnes: 0, perdus: 0, ca: 0 };
@@ -176,7 +174,7 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         }
       }
 
-      // ── Période précédente ──
+      // Période précédente
       if (precPeriodeKey) {
         const dateRefPrec = resultat === 'Gagné' ? (dateSign || dateRDV) : dateRDV;
         if (matchesPeriode(dateRefPrec, precPeriodeKey)) {
@@ -186,24 +184,23 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
             isRealise && resultat === 'Gagné',
             isRealise && resultat === 'Perdu',
             isRealise && resultat === 'En cours',
-            isNoshow, ca, caEst);
+            isNoshow, ca, caEst, coachPris);
         }
       }
     });
 
-    // Tri deals signés par date desc
     const sortByDate = arr => arr.sort((a, b) => {
       const da = a.date?.split('/').reverse().join('') || '';
       const db = b.date?.split('/').reverse().join('') || '';
       return db.localeCompare(da);
     });
 
-    result._dealsGagnes    = sortByDate(dealsGagnes);
-    result._dealsGagnes3m  = sortByDate(dealsGagnes3m);
-    result._dealsEnCours   = dealsEnCours;
-    result._origines       = originesMap;
-    result._offres         = offresMap;
-    result._prec           = precPeriodeKey ? prec : null;
+    result._dealsGagnes   = sortByDate(dealsGagnes);
+    result._dealsGagnes3m = sortByDate(dealsGagnes3m);
+    result._dealsEnCours  = dealsEnCours;
+    result._origines      = originesMap;
+    result._offres        = offresMap;
+    result._prec          = precPeriodeKey ? prec : null;
 
     return result;
   } catch (e) {
