@@ -24,7 +24,7 @@ const OBJ_CA_COACH = {
   Mathilde: 15000, Jenny: 15000, Gautier: 10000, Alexis: 5000, Rémi: 0,
 };
 const OBJ_RDV_COACH = {
-  Jenny: 5, Mathilde: 5, Gautier: 5, Alexis: 20, Rémi: 20,
+  Jenny: 10, Mathilde: 10, Gautier: 10, Alexis: 20, Rémi: 20,
 };
 
 function getObjectifs(granularite, coach) {
