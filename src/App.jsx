@@ -267,7 +267,7 @@ function OffresTable({ offresMap }) {
     <div className="tcard">
       <div className="tcard-hdr">
         <span className="tcard-title">Performance par offre</span>
-        <span className="tcard-sub">période sélectionnée</span>
+        <span className="tcard-sub">toutes périodes</span>
       </div>
       <table>
         <thead>

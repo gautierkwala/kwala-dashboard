@@ -134,6 +134,14 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         pipeTotal += caEst; // ← accumulation tout-temps
       }
 
+      // Offres — tout-temps, indépendant de la période
+      if (statut === 'Réalisé') {
+        if (!offresMap[offre]) offresMap[offre] = { rdv: 0, gagnes: 0, perdus: 0, ca: 0 };
+        offresMap[offre].rdv++;
+        if (resultat === 'Gagné')  { offresMap[offre].gagnes++; offresMap[offre].ca += ca; }
+        if (resultat === 'Perdu')    offresMap[offre].perdus++;
+      }
+
       // Deals signés 3 derniers mois
       if (statut === 'Réalisé' && resultat === 'Gagné' && isLast3Months(dateSign || dateRDV)) {
         dealsGagnes3m.push({ entreprise, contact, coach: rdvFaitPar || prisPar, ca, date: dateSign || dateRDV, offre });
@@ -171,14 +179,9 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
 
         accumulate(result, isRealise, isGagne, isPerdu, isEnCours, isNoshow, ca, caEst, coachPris);
 
-        // Offres — comptage RDV + deals (période courante)
-        if (isRealise && !isNoshow) {
-          if (!offresMap[offre]) offresMap[offre] = { rdv: 0, gagnes: 0, perdus: 0, ca: 0 };
-          offresMap[offre].rdv++;
-          if (isGagne)  { offresMap[offre].gagnes++; offresMap[offre].ca += ca; }
-          if (isPerdu)    offresMap[offre].perdus++;
-          dealsGagnes.push({ entreprise, contact, coach: rdvFaitPar || prisPar, ca, date: dateSign || dateRDV, offre });
-        }
+        accumulate(result, isRealise, isGagne, isPerdu, isEnCours, isNoshow, ca, caEst, coachPris);
+
+        if (isGagne) dealsGagnes.push({ entreprise, contact, coach: rdvFaitPar || prisPar, ca, date: dateSign || dateRDV, offre });
       }
 
       // Période précédente
