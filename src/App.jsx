@@ -14,7 +14,6 @@ const OFFRE_BADGE = {
 };
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/13r_qAdwCmtdriilX1nzL56r0eEaDX4fDw4vZx3pvfUM/edit';
 
-// Coaches "apporteurs" — CA et deals comptés via prisPar
 const COACHES_APPORTEURS = ['Alexis', 'Rémi'];
 
 const OBJ_CA_EQUIPE    = 30000;
@@ -254,6 +253,53 @@ function DealsEnCoursTable({ data }) {
   );
 }
 
+// Tableau perf par offre (Equipe + Entrepreneur uniquement)
+function OffresTable({ offresMap }) {
+  const OFFRES_CIBLES = ['Equipe', 'Entrepreneur'];
+  const rows = OFFRES_CIBLES.map(offre => {
+    const o = offresMap[offre] || { rdv: 0, gagnes: 0, perdus: 0, ca: 0 };
+    const taux = o.gagnes + o.perdus > 0 ? Math.round((o.gagnes / (o.gagnes + o.perdus)) * 100) : null;
+    const panier = o.gagnes > 0 ? Math.round(o.ca / o.gagnes) : 0;
+    return { offre, rdv: o.rdv, gagnes: o.gagnes, taux, ca: o.ca, panier };
+  });
+
+  return (
+    <div className="tcard">
+      <div className="tcard-hdr">
+        <span className="tcard-title">Performance par offre</span>
+        <span className="tcard-sub">période sélectionnée</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Offre</th>
+            <th style={{ textAlign: 'right' }}>RDV</th>
+            <th style={{ textAlign: 'right' }}>Signés</th>
+            <th style={{ textAlign: 'right' }}>Conv.</th>
+            <th style={{ textAlign: 'right' }}>CA signé</th>
+            <th style={{ textAlign: 'right' }}>Panier moy.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => {
+            const tauxColor = r.taux == null ? 'var(--txt2)' : r.taux >= 40 ? 'var(--green)' : r.taux >= 25 ? 'var(--amber)' : 'var(--red)';
+            return (
+              <tr key={i}>
+                <td><Badge offre={r.offre} /></td>
+                <td style={{ textAlign: 'right' }}>{r.rdv || '—'}</td>
+                <td style={{ textAlign: 'right', fontWeight: 600 }}>{r.gagnes || '—'}</td>
+                <td style={{ textAlign: 'right', fontWeight: 600, color: tauxColor }}>{r.taux != null ? r.taux + '%' : '—'}</td>
+                <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCA(r.ca)}</td>
+                <td style={{ textAlign: 'right', color: 'var(--txt2)' }}>{fmtCA(r.panier)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function App() {
   const now = new Date();
   const [year, setYear]               = useState(now.getFullYear());
@@ -286,16 +332,30 @@ export default function App() {
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); };
 
-  // Valeurs selon profil apporteur ou réalisateur
   const caRealise   = (isApporteur ? stats?.caApporte   : stats?.ca)       || 0;
   const rdvRealise  = (isApporteur ? stats?.rdvPris      : stats?.rdv)      || 0;
   const dealsGagnes = (isApporteur ? stats?.gagnesPris   : stats?.gagnes)   || 0;
 
-  const caEncours   = stats?.caEncours || 0;
   const encours     = stats?.encours   || 0;
   const perdus      = stats?.perdus    || 0;
   const panierMoyen = dealsGagnes > 0 ? Math.round(caRealise / dealsGagnes) : 0;
   const tauxConv    = fmtPct(dealsGagnes, dealsGagnes + perdus);
+
+  // ← Pipe : total tous-temps depuis _pipeTotal, filtré coach via _dealsEnCours
+  const pipeTotal = useMemo(() => {
+    if (!data?._dealsEnCours) return 0;
+    const deals = coach === 'tous'
+      ? data._dealsEnCours
+      : data._dealsEnCours.filter(d => d.coach === coach);
+    return deals.reduce((sum, d) => sum + (d.caEst || 0), 0);
+  }, [data, coach]);
+
+  const pipeCount = useMemo(() => {
+    if (!data?._dealsEnCours) return 0;
+    return coach === 'tous'
+      ? data._dealsEnCours.length
+      : data._dealsEnCours.filter(d => d.coach === coach).length;
+  }, [data, coach]);
 
   const projCA  = calcProjection(caRealise, year, month, granularite);
   const projRDV = calcProjection(rdvRealise, year, month, granularite);
@@ -326,7 +386,6 @@ export default function App() {
 
   const monthLabel = getMonthLabel(year, month, granularite);
 
-  // Titres dynamiques
   const titreCA    = isApporteur ? 'CA généré — RDV apportés'     : 'CA signé — RDV réalisés';
   const titreRDV   = isApporteur ? 'RDV apportés & réalisés'       : 'RDV réalisés';
   const titreDeals = isApporteur ? 'Deals signés — RDV apportés'   : 'Deals signés — RDV réalisés';
@@ -335,6 +394,14 @@ export default function App() {
     if (!d) return <span className="neu">— pas de données préc.</span>;
     return <span className={d.up ? 'up' : 'dn'}>{d.up ? '↑' : '↓'} {d.label}</span>;
   };
+
+  // Deals en cours filtrés par coach (pour la table)
+  const dealsEnCoursFiltres = useMemo(() => {
+    if (!data?._dealsEnCours) return [];
+    return coach === 'tous'
+      ? data._dealsEnCours
+      : data._dealsEnCours.filter(d => d.coach === coach);
+  }, [data, coach]);
 
   return (
     <>
@@ -455,8 +522,8 @@ export default function App() {
                 </div>
                 <div className="kpi">
                   <div className="kpi-lbl">Pipe en cours</div>
-                  <div className="kpi-val">{fmtCA(caEncours)}</div>
-                  <div className="kpi-trend neu">{encours} deals actifs</div>
+                  <div className="kpi-val">{fmtCA(pipeTotal)}</div>
+                  <div className="kpi-trend neu">{pipeCount} deal{pipeCount > 1 ? 's' : ''} actif{pipeCount > 1 ? 's' : ''} · tous mois</div>
                 </div>
               </div>
 
@@ -489,6 +556,7 @@ export default function App() {
                   </table>
                 </div>
 
+                {/* ENTONNOIR ORIGINES — avec colonne CA */}
                 <div className="tcard">
                   <div className="tcard-hdr">
                     <span className="tcard-title">Entonnoir par origine</span>
@@ -501,6 +569,7 @@ export default function App() {
                         <th style={{ textAlign: 'right' }}>Pris</th>
                         <th style={{ textAlign: 'right' }}>Réal.</th>
                         <th style={{ textAlign: 'right' }}>Signés</th>
+                        <th style={{ textAlign: 'right' }}>CA</th>
                         <th style={{ textAlign: 'right' }}>Conv.</th>
                       </tr>
                     </thead>
@@ -514,6 +583,7 @@ export default function App() {
                             <td style={{ textAlign: 'right' }}>{o.pris}</td>
                             <td style={{ textAlign: 'right' }}>{o.realises}</td>
                             <td style={{ textAlign: 'right', fontWeight: 600 }}>{o.gagnes}</td>
+                            <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCA(o.ca)}</td>
                             <td style={{ textAlign: 'right', fontWeight: 600, color: convColor }}>{conv}%</td>
                           </tr>
                         );
@@ -523,16 +593,19 @@ export default function App() {
                 </div>
               </div>
 
+              {/* PERF PAR OFFRE */}
+              <OffresTable offresMap={data?._offres || {}} />
+
               {/* DEALS EN COURS */}
               <div className="tcard">
                 <div className="tcard-hdr">
                   <span className="tcard-title">Deals en cours</span>
                   <span className="tcard-sub">
-                    {encours} deals · pipe {fmtCA(caEncours)}
+                    {pipeCount} deal{pipeCount > 1 ? 's' : ''} · pipe {fmtCA(pipeTotal)} · tous mois
                     {resteCA > 0 && <span style={{ color: '#185FA5', marginLeft: 8, fontWeight: 600 }}>🎯 Reste {fmtCA(resteCA)} à signer</span>}
                   </span>
                 </div>
-                <DealsEnCoursTable data={data?._dealsEnCours || []} />
+                <DealsEnCoursTable data={dealsEnCoursFiltres} />
               </div>
 
             </div>

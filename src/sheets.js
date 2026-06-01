@@ -97,6 +97,7 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
     const dealsEnCours  = [];
     const originesMap   = {};
     const offresMap     = {};
+    let pipeTotal = 0; // ← somme caEst tous deals en cours, toutes périodes
 
     rows.forEach(row => {
       const prisPar    = row[0]?.trim();
@@ -117,7 +118,7 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
       const coachPris = coaches.find(c => prisPar === c);
       if (!coach) return;
 
-      // Origines
+      // Origines (toutes périodes)
       if (statut !== 'A venir') {
         if (!originesMap[origine]) originesMap[origine] = { pris: 0, realises: 0, gagnes: 0, ca: 0 };
         originesMap[origine].pris++;
@@ -127,9 +128,10 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         }
       }
 
-      // Deals en cours
+      // Deals en cours (toutes périodes) + pipeTotal
       if (statut === 'Réalisé' && resultat === 'En cours') {
         dealsEnCours.push({ entreprise, contact, coach: rdvFaitPar || prisPar, date: dateRDV, offre, caEst });
+        pipeTotal += caEst; // ← accumulation tout-temps
       }
 
       // Deals signés 3 derniers mois
@@ -146,7 +148,6 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         if (isGagne) {
           target.tous.gagnes++; target.tous.ca += caVal;
           target[coach].gagnes++; target[coach].ca += caVal;
-          // CA et deals apportés = via prisPar
           if (pris && target[pris]) {
             target[pris].gagnesPris++; target[pris].caApporte += caVal;
             target.tous.gagnesPris++; target.tous.caApporte += caVal;
@@ -170,14 +171,13 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
 
         accumulate(result, isRealise, isGagne, isPerdu, isEnCours, isNoshow, ca, caEst, coachPris);
 
-        if (isGagne) {
-          if (!offresMap[offre]) offresMap[offre] = { gagnes: 0, perdus: 0, ca: 0 };
-          offresMap[offre].gagnes++; offresMap[offre].ca += ca;
+        // Offres — comptage RDV + deals (période courante)
+        if (isRealise && !isNoshow) {
+          if (!offresMap[offre]) offresMap[offre] = { rdv: 0, gagnes: 0, perdus: 0, ca: 0 };
+          offresMap[offre].rdv++;
+          if (isGagne)  { offresMap[offre].gagnes++; offresMap[offre].ca += ca; }
+          if (isPerdu)    offresMap[offre].perdus++;
           dealsGagnes.push({ entreprise, contact, coach: rdvFaitPar || prisPar, ca, date: dateSign || dateRDV, offre });
-        }
-        if (isPerdu) {
-          if (!offresMap[offre]) offresMap[offre] = { gagnes: 0, perdus: 0, ca: 0 };
-          offresMap[offre].perdus++;
         }
       }
 
@@ -207,6 +207,7 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
     result._dealsEnCours  = dealsEnCours;
     result._origines      = originesMap;
     result._offres        = offresMap;
+    result._pipeTotal     = pipeTotal; // ← nouveau
     result._prec          = precPeriodeKey ? prec : null;
 
     return result;
