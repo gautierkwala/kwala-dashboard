@@ -158,7 +158,6 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
           target[coach].gagnes++; target[coach].ca += caVal;
           if (pris && target[pris]) {
             target[pris].gagnesPris++; target[pris].caApporte += caVal;
-            target.tous.gagnesPris++; target.tous.caApporte += caVal;
           }
         }
         if (isPerdu)   { target.tous.perdus++; target[coach].perdus++; }
