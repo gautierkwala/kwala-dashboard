@@ -152,7 +152,7 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
       if (statut === 'Réalisé' && isPipeActif) {
         const priorite = resultat === 'Chaud' ? 0 : resultat === 'A recaler' ? 1 : 2;
         dealsEnCours.push({ entreprise, contact, coach: rdvFaitPar || prisPar, date: dateRDV, offre, caEst, statut: resultat, priorite });
-        pipeTotal += caEst;
+        if (resultat === 'Chaud') pipeTotal += caEst; // pipe = Chaud uniquement
       }
 
       // Fin d'accompagnement — deals Gagné avec date de fin dans les 30 prochains jours
@@ -200,11 +200,10 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         }
       }
 
-      // RDV pris sur la période (tous statuts) — pour l'encart RDV
-      if (matchesPeriode(dateRDV, periodeKey)) {
+      // RDV pris sur la période — basé sur prisPar uniquement (col A)
+      if (coachPris && matchesPeriode(dateRDV, periodeKey)) {
         result.tous.rdvTous++;
-        if (result[coach]) result[coach].rdvTous++;
-        if (coachPris && result[coachPris] && coachPris !== coach) result[coachPris].rdvTous++;
+        result[coachPris].rdvTous++;
       }
 
       // Période courante

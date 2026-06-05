@@ -401,12 +401,13 @@ export default function App() {
   const pipeTotal = useMemo(() => {
     if (!data?._dealsEnCours) return 0;
     const deals = coach === 'tous' ? data._dealsEnCours : data._dealsEnCours.filter(d => d.coach === coach);
-    return deals.reduce((sum, d) => sum + (d.caEst || 0), 0);
+    return deals.filter(d => d.statut === 'Chaud').reduce((sum, d) => sum + (d.caEst || 0), 0);
   }, [data, coach]);
 
   const pipeCount = useMemo(() => {
     if (!data?._dealsEnCours) return 0;
-    return coach === 'tous' ? data._dealsEnCours.length : data._dealsEnCours.filter(d => d.coach === coach).length;
+    const deals = coach === 'tous' ? data._dealsEnCours : data._dealsEnCours.filter(d => d.coach === coach);
+    return deals.filter(d => d.statut === 'Chaud').length;
   }, [data, coach]);
 
   const dealsEnCoursFiltres = useMemo(() => {
@@ -524,7 +525,7 @@ export default function App() {
                         ? <div className="pill-target" style={{ background: '#E1F5EE', color: '#085041' }}>🎉 Dépassé de {rdvRealise - obj.rdv} RDV</div>
                         : <div className="pill-target">🎯 Plus que {resteRDV} RDV</div>
                       }
-                      <div className="pill-info">📋 {rdvTous} RDV pris sur la période</div>
+                      <div className="pill-info">📋 {rdvTous} RDV pris · {stats?.noshow || 0} no show</div>
                     </div>
                   </div>
                 </div>
@@ -553,7 +554,7 @@ export default function App() {
                 <div className="kpi">
                   <div className="kpi-lbl">Pipe en cours</div>
                   <div className="kpi-val">{fmtCA(pipeTotal)}</div>
-                  <div className="kpi-trend neu">{pipeCount} deal{pipeCount > 1 ? 's' : ''} · tous mois</div>
+                  <div className="kpi-trend neu">{pipeCount} deal{pipeCount > 1 ? 's' : ''} chauds · tous mois</div>
                 </div>
               </div>
 
@@ -569,7 +570,7 @@ export default function App() {
                 <DealsEnCoursTable data={dealsEnCoursFiltres} />
               </div>
 
-              {/* 4. DEALS RÉCENTS + FINS ACCOMPAGNEMENT */}
+              {/* 4. DEALS RÉCENTS + ENTONNOIR */}
               <div className="tables-row">
                 <div className="tcard">
                   <div className="tcard-hdr">
@@ -598,18 +599,6 @@ export default function App() {
                   </table>
                 </div>
 
-                {finAccompFiltres.length > 0
-                  ? <FinAccompagnementTable data={finAccompFiltres} />
-                  : (
-                    <div className="tcard" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <span style={{ color: 'var(--txt3)', fontSize: 12 }}>✅ Aucune fin d'accompagnement dans les 30 jours</span>
-                    </div>
-                  )
-                }
-              </div>
-
-              {/* 5. ENTONNOIR + OFFRES */}
-              <div className="tables-row">
                 <div className="tcard">
                   <div className="tcard-hdr">
                     <span className="tcard-title">Entonnoir par origine</span>
@@ -644,7 +633,18 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+              </div>
 
+              {/* 5. FINS ACCOMPAGNEMENT + PERF OFFRES */}
+              <div className="tables-row">
+                {finAccompFiltres.length > 0
+                  ? <FinAccompagnementTable data={finAccompFiltres} />
+                  : (
+                    <div className="tcard" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ color: 'var(--txt3)', fontSize: 12 }}>✅ Aucune fin d'accompagnement dans les 30 jours</span>
+                    </div>
+                  )
+                }
                 <OffresTable offresMap={data?._offres || {}} />
               </div>
 
