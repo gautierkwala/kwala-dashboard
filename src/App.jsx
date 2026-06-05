@@ -12,34 +12,29 @@ const OFFRE_BADGE = {
   'Entrepreneur': { bg: '#E6F1FB', color: '#185FA5' },
   'Prescripteur': { bg: '#E1F5EE', color: '#0F6E56' },
 };
+const STATUT_PIPE_BADGE = {
+  'Chaud':     { bg: '#FDECEA', color: '#C0392B', icon: '🔥' },
+  'Froid':     { bg: '#EAF0FB', color: '#2E5FA3', icon: '🧊' },
+  'A recaler': { bg: '#FEF6E4', color: '#7D5A00', icon: '📅' },
+};
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/13r_qAdwCmtdriilX1nzL56r0eEaDX4fDw4vZx3pvfUM/edit';
-
 const COACHES_APPORTEURS = ['Alexis', 'Rémi'];
 
 const OBJ_CA_EQUIPE    = 30000;
 const OBJ_RDV_EQUIPE   = 20;
 const OBJ_DEALS_EQUIPE = 8;
-
-const OBJ_CA_COACH = {
-  Mathilde: 15000, Jenny: 15000, Gautier: 10000, Alexis: 20000, Rémi: 20000,
-};
-const OBJ_RDV_COACH = {
-  Jenny: 10, Mathilde: 10, Gautier: 10, Alexis: 20, Rémi: 20,
-};
-const OBJ_DEALS_COACH = {
-  Jenny: 4, Mathilde: 4, Gautier: 2, Alexis: 4, Rémi: 4,
-};
+const OBJ_CA_COACH    = { Mathilde: 15000, Jenny: 15000, Gautier: 10000, Alexis: 20000, Rémi: 20000 };
+const OBJ_RDV_COACH   = { Jenny: 10, Mathilde: 10, Gautier: 10, Alexis: 20, Rémi: 20 };
+const OBJ_DEALS_COACH = { Jenny: 4, Mathilde: 4, Gautier: 2, Alexis: 4, Rémi: 4 };
 
 function getObjectifs(granularite, coach) {
   const now = new Date();
   let factor = 1;
   if (granularite === 'trimestre') factor = 3;
   else if (granularite === 'ytd') factor = now.getMonth() + 1;
-
   const caBase    = coach !== 'tous' ? (OBJ_CA_COACH[coach]    ?? OBJ_CA_EQUIPE)    : OBJ_CA_EQUIPE;
   const rdvBase   = coach !== 'tous' ? (OBJ_RDV_COACH[coach]   ?? OBJ_RDV_EQUIPE)   : OBJ_RDV_EQUIPE;
   const dealsBase = coach !== 'tous' ? (OBJ_DEALS_COACH[coach] ?? OBJ_DEALS_EQUIPE) : OBJ_DEALS_EQUIPE;
-
   return { ca: caBase * factor, rdv: rdvBase * factor, deals: dealsBase * factor };
 }
 
@@ -64,17 +59,6 @@ function fmtPct(num, den) {
   if (!den) return '—';
   return Math.round((num / den) * 100) + '%';
 }
-
-function calcProjection(realise, year, month, granularite) {
-  if (granularite !== 'mois') return null;
-  const now = new Date();
-  if (now.getFullYear() !== year || now.getMonth() !== month) return null;
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const progress = now.getDate() / daysInMonth;
-  if (progress <= 0) return null;
-  return Math.round(realise / progress);
-}
-
 function fmtDelta(curr, prev, isCA = false) {
   if (prev == null || prev === 0) return null;
   const diff = curr - prev;
@@ -83,7 +67,6 @@ function fmtDelta(curr, prev, isCA = false) {
   if (isCA) return { label: `${sign}${fmtCA(diff)} vs période préc.`, up: diff >= 0 };
   return { label: `${sign}${diff} (${sign}${pct}%) vs période préc.`, up: diff >= 0 };
 }
-
 function getGaugeColor(pct) {
   if (pct >= 1)   return '#1D9E75';
   if (pct >= 0.8) return '#2E8BE6';
@@ -139,7 +122,7 @@ const CSS = `
   .meta-row { font-size: 11px; display: flex; align-items: center; gap: 4px; justify-content: center; }
   .up { color: var(--green); } .dn { color: var(--red); } .neu { color: var(--txt2); }
   .pill-target { background: #E6F1FB; color: #0C447C; border-radius: 7px; padding: 5px 9px; font-size: 11px; font-weight: 600; text-align: center; }
-  .pill-proj { background: #E1F5EE; color: #085041; border-radius: 7px; padding: 5px 9px; font-size: 11px; font-weight: 500; text-align: center; }
+  .pill-info { background: #F2F4F8; color: var(--txt2); border-radius: 7px; padding: 5px 9px; font-size: 11px; font-weight: 500; text-align: center; }
 
   .kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
   .kpi { background: var(--surface); border: 0.5px solid var(--bdr); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; align-items: center; text-align: center; }
@@ -158,6 +141,9 @@ const CSS = `
   td { padding: 5px 8px; border-bottom: 0.5px solid var(--bdr); color: var(--txt); }
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: rgba(0,0,0,0.012); }
+
+  .alert-card { background: #FFF8E1; border: 1.5px solid #F59E0B; border-radius: 12px; padding: 12px 14px; }
+  .alert-card .tcard-title { color: #92400E; }
 
   .link-btn { font-size: 10px; color: var(--txt2); text-decoration: none; border: 0.5px solid var(--bdr); border-radius: 6px; padding: 2px 7px; }
   .link-btn:hover { color: var(--txt); }
@@ -197,14 +183,21 @@ function Badge({ offre }) {
   return <span style={{ display: 'inline-block', fontSize: 10, padding: '2px 7px', borderRadius: 20, fontWeight: 500, background: s.bg, color: s.color }}>{offre || '—'}</span>;
 }
 
+function StatutBadge({ statut }) {
+  const s = STATUT_PIPE_BADGE[statut] || { bg: '#F1EFE8', color: '#5F5E5A', icon: '' };
+  return <span style={{ display: 'inline-block', fontSize: 10, padding: '2px 7px', borderRadius: 20, fontWeight: 600, background: s.bg, color: s.color }}>{s.icon} {statut}</span>;
+}
+
 function CoachDot({ coach }) {
   return <span style={{ width: 7, height: 7, borderRadius: '50%', display: 'inline-block', marginRight: 4, verticalAlign: 'middle', background: COACH_COLORS[coach] || '#888' }} />;
 }
 
 function DealsEnCoursTable({ data }) {
-  const [sortCol, setSortCol] = useState(3);
-  const [sortDir, setSortDir] = useState(-1);
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState(1);
+
   const cols = [
+    { label: 'Statut',    key: 'priorite' },
     { label: 'Contact',   key: 'contact' },
     { label: 'Entreprise',key: 'entreprise' },
     { label: 'Coach',     key: 'coach' },
@@ -212,17 +205,22 @@ function DealsEnCoursTable({ data }) {
     { label: 'Offre',     key: 'offre' },
     { label: 'CA est.',   key: 'caEst', right: true },
   ];
-  const sorted = useMemo(() => [...(data || [])].sort((a, b) => {
-    const k = cols[sortCol].key;
-    if (k === 'caEst') return (Number(a[k] ?? 0) - Number(b[k] ?? 0)) * sortDir;
-    return String(a[k] ?? '').localeCompare(String(b[k] ?? '')) * sortDir;
-  }), [data, sortCol, sortDir]);
+
+  const sorted = useMemo(() => {
+    const arr = [...(data || [])];
+    if (sortCol === null) return arr; // tri par défaut : priorite (déjà fait dans sheets.js)
+    return arr.sort((a, b) => {
+      const k = cols[sortCol].key;
+      if (k === 'caEst' || k === 'priorite') return (Number(a[k] ?? 0) - Number(b[k] ?? 0)) * sortDir;
+      return String(a[k] ?? '').localeCompare(String(b[k] ?? '')) * sortDir;
+    });
+  }, [data, sortCol, sortDir]);
 
   const onSort = (i) => { if (sortCol === i) setSortDir(d => -d); else { setSortCol(i); setSortDir(1); } };
 
   return (
     <div className="tbl-wrap">
-      <table style={{ minWidth: 480 }}>
+      <table style={{ minWidth: 520 }}>
         <thead>
           <tr>
             {cols.map((c, i) => (
@@ -235,7 +233,8 @@ function DealsEnCoursTable({ data }) {
         </thead>
         <tbody>
           {sorted.map((d, i) => (
-            <tr key={i}>
+            <tr key={i} style={d.statut === 'Chaud' ? { background: '#FFFBF5' } : {}}>
+              <td><StatutBadge statut={d.statut} /></td>
               <td>{d.contact || '—'}</td>
               <td>{d.entreprise || '—'}</td>
               <td><CoachDot coach={d.coach} />{d.coach}</td>
@@ -245,7 +244,7 @@ function DealsEnCoursTable({ data }) {
             </tr>
           ))}
           {sorted.length === 0 && (
-            <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: 'var(--txt2)' }}>Aucun deal en cours</td></tr>
+            <tr><td colSpan={7} style={{ padding: 20, textAlign: 'center', color: 'var(--txt2)' }}>Aucun deal en cours</td></tr>
           )}
         </tbody>
       </table>
@@ -253,7 +252,47 @@ function DealsEnCoursTable({ data }) {
   );
 }
 
-// Tableau perf par offre (Equipe + Entrepreneur uniquement)
+function FinAccompagnementTable({ data }) {
+  if (!data || data.length === 0) return null;
+  return (
+    <div className="alert-card">
+      <div className="tcard-hdr">
+        <span className="tcard-title">⚠️ Fins d'accompagnement proches</span>
+        <span className="tcard-sub" style={{ color: '#92400E' }}>{data.length} client{data.length > 1 ? 's' : ''} · dans les 30 jours</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Entreprise</th>
+            <th>Coach</th>
+            <th>Offre</th>
+            <th style={{ textAlign: 'right' }}>Date fin</th>
+            <th style={{ textAlign: 'right' }}>Jours restants</th>
+            <th style={{ textAlign: 'right' }}>CA signé</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((d, i) => {
+            const urgence = d.joursRestants <= 7 ? '#E24B4A' : d.joursRestants <= 14 ? '#BA7517' : '#854F0B';
+            return (
+              <tr key={i}>
+                <td style={{ fontWeight: 600 }}>{d.entreprise || '—'}</td>
+                <td><CoachDot coach={d.coach} />{d.coach}</td>
+                <td><Badge offre={d.offre} /></td>
+                <td style={{ textAlign: 'right', color: 'var(--txt2)' }}>{d.dateFin}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700, color: urgence }}>
+                  {d.joursRestants}j
+                </td>
+                <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCA(d.ca)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function OffresTable({ offresMap }) {
   const OFFRES_CIBLES = ['Equipe', 'Entrepreneur'];
   const rows = OFFRES_CIBLES.map(offre => {
@@ -262,7 +301,6 @@ function OffresTable({ offresMap }) {
     const panier = o.gagnes > 0 ? Math.round(o.ca / o.gagnes) : 0;
     return { offre, rdv: o.rdv, gagnes: o.gagnes, taux, ca: o.ca, panier };
   });
-
   return (
     <div className="tcard">
       <div className="tcard-hdr">
@@ -332,33 +370,13 @@ export default function App() {
   const prevMonth = () => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); };
 
-  const caRealise   = (isApporteur ? stats?.caApporte   : stats?.ca)       || 0;
-  const rdvRealise  = (isApporteur ? stats?.rdvPris      : stats?.rdv)      || 0;
-  const dealsGagnes = (isApporteur ? stats?.gagnesPris   : stats?.gagnes)   || 0;
-
-  const encours     = stats?.encours   || 0;
-  const perdus      = stats?.perdus    || 0;
+  const caRealise   = (isApporteur ? stats?.caApporte : stats?.ca)     || 0;
+  const rdvRealise  = (isApporteur ? stats?.rdvPris   : stats?.rdv)    || 0;
+  const rdvTous     = stats?.rdvTous || 0;
+  const dealsGagnes = (isApporteur ? stats?.gagnesPris : stats?.gagnes) || 0;
+  const perdus      = stats?.perdus  || 0;
   const panierMoyen = dealsGagnes > 0 ? Math.round(caRealise / dealsGagnes) : 0;
   const tauxConv    = fmtPct(dealsGagnes, dealsGagnes + perdus);
-
-  // ← Pipe : total tous-temps depuis _pipeTotal, filtré coach via _dealsEnCours
-  const pipeTotal = useMemo(() => {
-    if (!data?._dealsEnCours) return 0;
-    const deals = coach === 'tous'
-      ? data._dealsEnCours
-      : data._dealsEnCours.filter(d => d.coach === coach);
-    return deals.reduce((sum, d) => sum + (d.caEst || 0), 0);
-  }, [data, coach]);
-
-  const pipeCount = useMemo(() => {
-    if (!data?._dealsEnCours) return 0;
-    return coach === 'tous'
-      ? data._dealsEnCours.length
-      : data._dealsEnCours.filter(d => d.coach === coach).length;
-  }, [data, coach]);
-
-  const projCA  = calcProjection(caRealise, year, month, granularite);
-  const projRDV = calcProjection(rdvRealise, year, month, granularite);
 
   const resteCA    = Math.max(0, obj.ca - caRealise);
   const resteRDV   = Math.max(0, obj.rdv - rdvRealise);
@@ -379,29 +397,42 @@ export default function App() {
     return { label: `${diff >= 0 ? '+' : ''}${diff}pts vs période préc.`, up: diff >= 0 };
   })() : null;
 
+  // Pipe — filtré par coach, tout-temps
+  const pipeTotal = useMemo(() => {
+    if (!data?._dealsEnCours) return 0;
+    const deals = coach === 'tous' ? data._dealsEnCours : data._dealsEnCours.filter(d => d.coach === coach);
+    return deals.reduce((sum, d) => sum + (d.caEst || 0), 0);
+  }, [data, coach]);
+
+  const pipeCount = useMemo(() => {
+    if (!data?._dealsEnCours) return 0;
+    return coach === 'tous' ? data._dealsEnCours.length : data._dealsEnCours.filter(d => d.coach === coach).length;
+  }, [data, coach]);
+
+  const dealsEnCoursFiltres = useMemo(() => {
+    if (!data?._dealsEnCours) return [];
+    return coach === 'tous' ? data._dealsEnCours : data._dealsEnCours.filter(d => d.coach === coach);
+  }, [data, coach]);
+
+  const finAccompFiltres = useMemo(() => {
+    if (!data?._finAccompagnement) return [];
+    return coach === 'tous' ? data._finAccompagnement : data._finAccompagnement.filter(d => d.coach === coach);
+  }, [data, coach]);
+
   const origines = useMemo(() => {
     if (!data?._origines) return [];
     return Object.entries(data._origines).map(([nom, o]) => ({ nom, ...o })).sort((a, b) => b.pris - a.pris);
   }, [data]);
 
   const monthLabel = getMonthLabel(year, month, granularite);
-
-  const titreCA    = isApporteur ? 'CA généré — RDV apportés'     : 'CA signé — RDV réalisés';
-  const titreRDV   = isApporteur ? 'RDV apportés & réalisés'       : 'RDV réalisés';
-  const titreDeals = isApporteur ? 'Deals signés — RDV apportés'   : 'Deals signés — RDV réalisés';
+  const titreCA    = isApporteur ? 'CA généré — RDV apportés'   : 'CA signé — RDV réalisés';
+  const titreRDV   = isApporteur ? 'RDV apportés & réalisés'     : 'RDV réalisés';
+  const titreDeals = isApporteur ? 'Deals signés — RDV apportés' : 'Deals signés — RDV réalisés';
 
   const Delta = ({ d }) => {
     if (!d) return <span className="neu">— pas de données préc.</span>;
     return <span className={d.up ? 'up' : 'dn'}>{d.up ? '↑' : '↓'} {d.label}</span>;
   };
-
-  // Deals en cours filtrés par coach (pour la table)
-  const dealsEnCoursFiltres = useMemo(() => {
-    if (!data?._dealsEnCours) return [];
-    return coach === 'tous'
-      ? data._dealsEnCours
-      : data._dealsEnCours.filter(d => d.coach === coach);
-  }, [data, coach]);
 
   return (
     <>
@@ -413,9 +444,9 @@ export default function App() {
             <div className="logo-wrap"><img src={LOGO} alt="Kwala" /></div>
             <span className="hdr-title">Kwala Dashboard</span>
             <div className="nav-month">
-              <button className="nav-btn" onClick={prevMonth} aria-label="Mois précédent">‹</button>
+              <button className="nav-btn" onClick={prevMonth}>‹</button>
               <span className="nav-label">{monthLabel} ▾</span>
-              <button className="nav-btn" onClick={nextMonth} aria-label="Mois suivant">›</button>
+              <button className="nav-btn" onClick={nextMonth}>›</button>
             </div>
             <div className="pills">
               {[['mois','Mois'],['trimestre','Trimestre'],['ytd','YTD']].map(([k,l]) => (
@@ -447,7 +478,7 @@ export default function App() {
           <div className="inner">
             <div className="body">
 
-              {/* JAUGES */}
+              {/* 1. JAUGES */}
               <div className="gauges-row">
                 <div className="gcard">
                   <div className="gcard-hdr">
@@ -469,7 +500,6 @@ export default function App() {
                         ? <div className="pill-target" style={{ background: '#E1F5EE', color: '#085041' }}>🎉 Dépassé de {fmtCA(caRealise - obj.ca)} (+{Math.round(((caRealise - obj.ca) / obj.ca) * 100)}%)</div>
                         : <div className="pill-target">🎯 Reste à signer : {fmtCA(resteCA)}</div>
                       }
-                      {projCA && <div className="pill-proj">📈 Projection : {fmtCA(projCA)}</div>}
                     </div>
                   </div>
                 </div>
@@ -491,16 +521,16 @@ export default function App() {
                       </div>
                       <div className="meta-row"><Delta d={deltaRDV} /></div>
                       {rdvRealise >= obj.rdv
-                        ? <div className="pill-target" style={{ background: '#E1F5EE', color: '#085041' }}>🎉 Dépassé de {rdvRealise - obj.rdv} RDV (+{Math.round(((rdvRealise - obj.rdv) / obj.rdv) * 100)}%)</div>
+                        ? <div className="pill-target" style={{ background: '#E1F5EE', color: '#085041' }}>🎉 Dépassé de {rdvRealise - obj.rdv} RDV</div>
                         : <div className="pill-target">🎯 Plus que {resteRDV} RDV</div>
                       }
-                      {projRDV && <div className="pill-proj">📈 Projection : {projRDV} RDV</div>}
+                      <div className="pill-info">📋 {rdvTous} RDV pris sur la période</div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* KPI SECONDAIRES */}
+              {/* 2. KPI SECONDAIRES */}
               <div className="kpi-row">
                 <div className="kpi">
                   <div className="kpi-lbl">{titreDeals}</div>
@@ -523,11 +553,23 @@ export default function App() {
                 <div className="kpi">
                   <div className="kpi-lbl">Pipe en cours</div>
                   <div className="kpi-val">{fmtCA(pipeTotal)}</div>
-                  <div className="kpi-trend neu">{pipeCount} deal{pipeCount > 1 ? 's' : ''} actif{pipeCount > 1 ? 's' : ''} · tous mois</div>
+                  <div className="kpi-trend neu">{pipeCount} deal{pipeCount > 1 ? 's' : ''} · tous mois</div>
                 </div>
               </div>
 
-              {/* TABLES */}
+              {/* 3. DEALS EN COURS — pleine largeur */}
+              <div className="tcard">
+                <div className="tcard-hdr">
+                  <span className="tcard-title">Deals en cours</span>
+                  <span className="tcard-sub">
+                    {pipeCount} deal{pipeCount > 1 ? 's' : ''} · pipe {fmtCA(pipeTotal)} · tous mois
+                    {resteCA > 0 && <span style={{ color: '#185FA5', marginLeft: 8, fontWeight: 600 }}>🎯 Reste {fmtCA(resteCA)} à signer</span>}
+                  </span>
+                </div>
+                <DealsEnCoursTable data={dealsEnCoursFiltres} />
+              </div>
+
+              {/* 4. DEALS RÉCENTS + FINS ACCOMPAGNEMENT */}
               <div className="tables-row">
                 <div className="tcard">
                   <div className="tcard-hdr">
@@ -556,7 +598,18 @@ export default function App() {
                   </table>
                 </div>
 
-                {/* ENTONNOIR ORIGINES — avec colonne CA */}
+                {finAccompFiltres.length > 0
+                  ? <FinAccompagnementTable data={finAccompFiltres} />
+                  : (
+                    <div className="tcard" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ color: 'var(--txt3)', fontSize: 12 }}>✅ Aucune fin d'accompagnement dans les 30 jours</span>
+                    </div>
+                  )
+                }
+              </div>
+
+              {/* 5. ENTONNOIR + OFFRES */}
+              <div className="tables-row">
                 <div className="tcard">
                   <div className="tcard-hdr">
                     <span className="tcard-title">Entonnoir par origine</span>
@@ -591,21 +644,8 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
-              </div>
 
-              {/* PERF PAR OFFRE */}
-              <OffresTable offresMap={data?._offres || {}} />
-
-              {/* DEALS EN COURS */}
-              <div className="tcard">
-                <div className="tcard-hdr">
-                  <span className="tcard-title">Deals en cours</span>
-                  <span className="tcard-sub">
-                    {pipeCount} deal{pipeCount > 1 ? 's' : ''} · pipe {fmtCA(pipeTotal)} · tous mois
-                    {resteCA > 0 && <span style={{ color: '#185FA5', marginLeft: 8, fontWeight: 600 }}>🎯 Reste {fmtCA(resteCA)} à signer</span>}
-                  </span>
-                </div>
-                <DealsEnCoursTable data={dealsEnCoursFiltres} />
+                <OffresTable offresMap={data?._offres || {}} />
               </div>
 
             </div>

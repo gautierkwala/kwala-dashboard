@@ -29,6 +29,12 @@ function parseDate(str) {
   return { day: d, month: m, year: y };
 }
 
+function toJSDate(str) {
+  const d = parseDate(str);
+  if (!d) return null;
+  return new Date(d.year, d.month, d.day);
+}
+
 function matchesPeriode(dateStr, periodeKey) {
   const d = parseDate(dateStr);
   if (!d) return false;
@@ -68,7 +74,7 @@ export function getPrecPeriode(periodeKey) {
 
 function emptyStats() {
   return {
-    rdv: 0, rdvPris: 0,
+    rdv: 0, rdvPris: 0, rdvTous: 0,
     gagnes: 0, gagnesPris: 0,
     encours: 0, perdus: 0, noshow: 0,
     ca: 0, caEncours: 0, caApporte: 0,
@@ -83,9 +89,13 @@ function isLast3Months(dateStr) {
   return new Date(d.year, d.month, 1) >= limit;
 }
 
+// Statuts "pipe actif" — remplace "En cours"
+const STATUTS_PIPE = ['Chaud', 'Froid', 'A recaler'];
+
 export async function fetchRDVData(periodeKey, precPeriodeKey) {
   try {
-    const rows = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Liste des rendez-vous Equipe!A2:Q500');
+    // Lire jusqu'à col T (index 19) pour récupérer date début/fin
+    const rows = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Liste des rendez-vous Equipe!A2:T500');
     const coaches = ['Alexis', 'Gautier', 'Mathilde', 'Jenny', 'Rémi'];
 
     const result = { tous: emptyStats() };
@@ -95,9 +105,13 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
     const dealsGagnes   = [];
     const dealsGagnes3m = [];
     const dealsEnCours  = [];
+    const finAccompagnement = [];
     const originesMap   = {};
     const offresMap     = {};
-    let pipeTotal = 0; // ← somme caEst tous deals en cours, toutes périodes
+    let pipeTotal = 0;
+
+    const now = new Date();
+    const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     rows.forEach(row => {
       const prisPar    = row[0]?.trim();
@@ -112,11 +126,17 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
       const offre      = row[12]?.trim() || 'Non défini';
       const caEst      = parseAmount(row[13]);
       const ca         = parseAmount(row[14]);
+      // col P (15) = Coach attribué — ignoré
+      // col Q (16) = Envoi notif — ignoré
+      // col R (17) = Commentaire — ignoré
+      const dateFin    = row[19]?.trim(); // col T
 
       if (!prisPar) return;
       const coach     = coaches.find(c => rdvFaitPar === c) || coaches.find(c => prisPar === c);
       const coachPris = coaches.find(c => prisPar === c);
       if (!coach) return;
+
+      const isPipeActif = STATUTS_PIPE.includes(resultat);
 
       // Origines (toutes périodes)
       if (statut !== 'A venir') {
@@ -128,13 +148,26 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         }
       }
 
-      // Deals en cours (toutes périodes) + pipeTotal
-      if (statut === 'Réalisé' && resultat === 'En cours') {
-        dealsEnCours.push({ entreprise, contact, coach: rdvFaitPar || prisPar, date: dateRDV, offre, caEst });
-        pipeTotal += caEst; // ← accumulation tout-temps
+      // Deals en cours (toutes périodes) — nouveaux statuts
+      if (statut === 'Réalisé' && isPipeActif) {
+        const priorite = resultat === 'Chaud' ? 0 : resultat === 'A recaler' ? 1 : 2;
+        dealsEnCours.push({ entreprise, contact, coach: rdvFaitPar || prisPar, date: dateRDV, offre, caEst, statut: resultat, priorite });
+        pipeTotal += caEst;
       }
 
-      // Offres — tout-temps, indépendant de la période
+      // Fin d'accompagnement — deals Gagné avec date de fin dans les 30 prochains jours
+      if (resultat === 'Gagné' && dateFin) {
+        const dateFinJS = toJSDate(dateFin);
+        if (dateFinJS && dateFinJS >= now && dateFinJS <= in30) {
+          const joursRestants = Math.ceil((dateFinJS - now) / (1000 * 60 * 60 * 24));
+          finAccompagnement.push({
+            entreprise, contact, coach: rdvFaitPar || prisPar,
+            dateFin, joursRestants, ca, offre
+          });
+        }
+      }
+
+      // Offres — tout-temps
       if (statut === 'Réalisé') {
         if (!offresMap[offre]) offresMap[offre] = { rdv: 0, gagnes: 0, perdus: 0, ca: 0 };
         offresMap[offre].rdv++;
@@ -167,6 +200,13 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         }
       }
 
+      // RDV pris sur la période (tous statuts) — pour l'encart RDV
+      if (matchesPeriode(dateRDV, periodeKey)) {
+        result.tous.rdvTous++;
+        if (result[coach]) result[coach].rdvTous++;
+        if (coachPris && result[coachPris] && coachPris !== coach) result[coachPris].rdvTous++;
+      }
+
       // Période courante
       const dateRef = resultat === 'Gagné' ? (dateSign || dateRDV) : dateRDV;
       if (matchesPeriode(dateRef, periodeKey)) {
@@ -174,7 +214,7 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         const isRealise = statut === 'Réalisé';
         const isGagne   = isRealise && resultat === 'Gagné';
         const isPerdu   = isRealise && resultat === 'Perdu';
-        const isEnCours = isRealise && resultat === 'En cours';
+        const isEnCours = isRealise && isPipeActif;
 
         accumulate(result, isRealise, isGagne, isPerdu, isEnCours, isNoshow, ca, caEst, coachPris);
 
@@ -190,7 +230,7 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
           accumulate(prec, isRealise,
             isRealise && resultat === 'Gagné',
             isRealise && resultat === 'Perdu',
-            isRealise && resultat === 'En cours',
+            isRealise && STATUTS_PIPE.includes(resultat),
             isNoshow, ca, caEst, coachPris);
         }
       }
@@ -202,13 +242,19 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
       return db.localeCompare(da);
     });
 
-    result._dealsGagnes   = sortByDate(dealsGagnes);
-    result._dealsGagnes3m = sortByDate(dealsGagnes3m);
-    result._dealsEnCours  = dealsEnCours;
-    result._origines      = originesMap;
-    result._offres        = offresMap;
-    result._pipeTotal     = pipeTotal; // ← nouveau
-    result._prec          = precPeriodeKey ? prec : null;
+    // Tri deals en cours : Chaud > A recaler > Froid
+    dealsEnCours.sort((a, b) => a.priorite - b.priorite);
+    // Tri fins d'accompagnement : plus urgent en premier
+    finAccompagnement.sort((a, b) => a.joursRestants - b.joursRestants);
+
+    result._dealsGagnes        = sortByDate(dealsGagnes);
+    result._dealsGagnes3m      = sortByDate(dealsGagnes3m);
+    result._dealsEnCours       = dealsEnCours;
+    result._finAccompagnement  = finAccompagnement;
+    result._origines           = originesMap;
+    result._offres             = offresMap;
+    result._pipeTotal          = pipeTotal;
+    result._prec               = precPeriodeKey ? prec : null;
 
     return result;
   } catch (e) {
