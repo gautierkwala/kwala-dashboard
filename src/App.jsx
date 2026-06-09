@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { fetchRDVData, getPrecPeriode } from "./sheets";
+import { fetchRDVData, getPrecPeriode, fetchTrustfolioCount } from "./sheets";
 
 const LOGO = "/logo.jpeg";
 const COACHES = ['Alexis', 'Rémi', 'Mathilde', 'Jenny', 'Gautier'];
@@ -26,6 +26,8 @@ const OBJ_DEALS_EQUIPE = 8;
 const OBJ_CA_COACH    = { Mathilde: 15000, Jenny: 15000, Gautier: 10000, Alexis: 20000, Rémi: 20000 };
 const OBJ_RDV_COACH   = { Jenny: 10, Mathilde: 10, Gautier: 10, Alexis: 20, Rémi: 20 };
 const OBJ_DEALS_COACH = { Jenny: 4, Mathilde: 4, Gautier: 2, Alexis: 4, Rémi: 4 };
+
+const OBJ_TEMOIGNAGES = 100;
 
 function getObjectifs(granularite, coach) {
   const now = new Date();
@@ -148,6 +150,54 @@ const CSS = `
   .link-btn { font-size: 10px; color: var(--txt2); text-decoration: none; border: 0.5px solid var(--bdr); border-radius: 6px; padding: 2px 7px; }
   .link-btn:hover { color: var(--txt); }
 
+  /* Trustfolio progress bar */
+  .trust-card {
+    background: var(--surface);
+    border: 0.5px solid var(--bdr);
+    border-radius: 12px;
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .trust-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .trust-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--txt);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .trust-count {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--txt2);
+  }
+  .trust-bar-bg {
+    width: 100%;
+    height: 10px;
+    background: rgba(0,0,0,0.07);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .trust-bar-fill {
+    height: 100%;
+    border-radius: 99px;
+    transition: width 0.8s cubic-bezier(.4,0,.2,1);
+  }
+  .trust-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: var(--txt3);
+  }
+
   @media (max-width: 680px) {
     .gauges-row, .tables-row { grid-template-columns: 1fr; }
     .kpi-row { grid-template-columns: repeat(2, 1fr); }
@@ -192,6 +242,33 @@ function CoachDot({ coach }) {
   return <span style={{ width: 7, height: 7, borderRadius: '50%', display: 'inline-block', marginRight: 4, verticalAlign: 'middle', background: COACH_COLORS[coach] || '#888' }} />;
 }
 
+function TrustfolioBar({ count }) {
+  const pct = Math.min(count / OBJ_TEMOIGNAGES, 1);
+  const color = getGaugeColor(pct);
+  const reste = Math.max(0, OBJ_TEMOIGNAGES - count);
+  return (
+    <div className="trust-card">
+      <div className="trust-header">
+        <span className="trust-title">⭐ Témoignages clients</span>
+        <span className="trust-count">{count} / {OBJ_TEMOIGNAGES}</span>
+      </div>
+      <div className="trust-bar-bg">
+        <div
+          className="trust-bar-fill"
+          style={{ width: `${pct * 100}%`, background: color }}
+        />
+      </div>
+      <div className="trust-footer">
+        <span>{Math.round(pct * 100)}% de l'objectif atteint</span>
+        {reste > 0
+          ? <span>🎯 encore {reste} témoignage{reste > 1 ? 's' : ''}</span>
+          : <span style={{ color: '#1D9E75', fontWeight: 600 }}>🎉 Objectif atteint !</span>
+        }
+      </div>
+    </div>
+  );
+}
+
 function DealsEnCoursTable({ data }) {
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState(1);
@@ -208,7 +285,7 @@ function DealsEnCoursTable({ data }) {
 
   const sorted = useMemo(() => {
     const arr = [...(data || [])];
-    if (sortCol === null) return arr; // tri par défaut : priorite (déjà fait dans sheets.js)
+    if (sortCol === null) return arr;
     return arr.sort((a, b) => {
       const k = cols[sortCol].key;
       if (k === 'caEst' || k === 'priorite') return (Number(a[k] ?? 0) - Number(b[k] ?? 0)) * sortDir;
@@ -264,7 +341,7 @@ function FinAccompagnementTable({ data }) {
         <thead>
           <tr>
             <th>Entreprise</th>
-            <th>Coach</th>
+            <th>Coach attribué</th>
             <th>Offre</th>
             <th style={{ textAlign: 'right' }}>Date fin</th>
             <th style={{ textAlign: 'right' }}>Jours restants</th>
@@ -277,12 +354,10 @@ function FinAccompagnementTable({ data }) {
             return (
               <tr key={i}>
                 <td style={{ fontWeight: 600 }}>{d.entreprise || '—'}</td>
-                <td><CoachDot coach={d.coach} />{d.coach}</td>
+                <td><CoachDot coach={d.coach} />{d.coach || '—'}</td>
                 <td><Badge offre={d.offre} /></td>
                 <td style={{ textAlign: 'right', color: 'var(--txt2)' }}>{d.dateFin}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700, color: urgence }}>
-                  {d.joursRestants}j
-                </td>
+                <td style={{ textAlign: 'right', fontWeight: 700, color: urgence }}>{d.joursRestants}j</td>
                 <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmtCA(d.ca)}</td>
               </tr>
             );
@@ -346,6 +421,7 @@ export default function App() {
   const [coach, setCoach]             = useState('tous');
   const [data, setData]               = useState(null);
   const [loading, setLoading]         = useState(true);
+  const [trustCount, setTrustCount]   = useState(0);
 
   const isApporteur    = COACHES_APPORTEURS.includes(coach);
   const periodeKey     = getPeriodeKey(granularite, year, month);
@@ -356,6 +432,11 @@ export default function App() {
     setLoading(true);
     fetchRDVData(periodeKey, precPeriodeKey).then(d => { setData(d); setLoading(false); });
   }, [periodeKey]);
+
+  // Chargement du count Trustfolio — une seule fois, non filtré
+  useEffect(() => {
+    fetchTrustfolioCount().then(setTrustCount);
+  }, []);
 
   const stats = useMemo(() => {
     if (!data) return null;
@@ -397,7 +478,6 @@ export default function App() {
     return { label: `${diff >= 0 ? '+' : ''}${diff}pts vs période préc.`, up: diff >= 0 };
   })() : null;
 
-  // Pipe — filtré par coach, tout-temps
   const pipeTotal = useMemo(() => {
     if (!data?._dealsEnCours) return 0;
     const deals = coach === 'tous' ? data._dealsEnCours : data._dealsEnCours.filter(d => d.coach === coach);
@@ -558,7 +638,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* 3. DEALS EN COURS — pleine largeur */}
+              {/* 3. DEALS EN COURS */}
               <div className="tcard">
                 <div className="tcard-hdr">
                   <span className="tcard-title">Deals en cours</span>
@@ -647,6 +727,9 @@ export default function App() {
                 }
                 <OffresTable offresMap={data?._offres || {}} />
               </div>
+
+              {/* 6. BARRE TÉMOIGNAGES TRUSTFOLIO — non filtrée */}
+              <TrustfolioBar count={trustCount} />
 
             </div>
           </div>

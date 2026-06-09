@@ -89,12 +89,24 @@ function isLast3Months(dateStr) {
   return new Date(d.year, d.month, 1) >= limit;
 }
 
-// Statuts "pipe actif" — remplace "En cours"
 const STATUTS_PIPE = ['Chaud', 'Froid', 'A recaler'];
+
+// Lit le nombre de témoignages depuis la cellule Q3 de l'onglet Trustfolio
+export async function fetchTrustfolioCount() {
+  try {
+    const values = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Trustfolio!Q3');
+    const raw = values?.[0]?.[0];
+    const count = parseInt(raw);
+    return isNaN(count) ? 0 : count;
+  } catch (e) {
+    console.error('fetchTrustfolioCount error:', e);
+    return 0;
+  }
+}
 
 export async function fetchRDVData(periodeKey, precPeriodeKey) {
   try {
-    // Lire jusqu'à col T (index 19) pour récupérer date début/fin
+    // Col A→T (index 0→19)
     const rows = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Liste des rendez-vous Equipe!A2:T500');
     const coaches = ['Alexis', 'Gautier', 'Mathilde', 'Jenny', 'Rémi'];
 
@@ -114,22 +126,20 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
     const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     rows.forEach(row => {
-      const prisPar    = row[0]?.trim();
-      const origine    = row[1]?.trim() || 'Non renseigné';
-      const entreprise = row[2]?.trim();
-      const contact    = row[3]?.trim();
-      const dateRDV    = row[6]?.trim();
-      const rdvFaitPar = row[7]?.trim();
-      const statut     = row[9]?.trim();
-      const resultat   = row[10]?.trim();
-      const dateSign   = row[11]?.trim();
-      const offre      = row[12]?.trim() || 'Non défini';
-      const caEst      = parseAmount(row[13]);
-      const ca         = parseAmount(row[14]);
-      // col P (15) = Coach attribué — ignoré
-      // col Q (16) = Envoi notif — ignoré
-      // col R (17) = Commentaire — ignoré
-      const dateFin    = row[19]?.trim(); // col T
+      const prisPar       = row[0]?.trim();
+      const origine       = row[1]?.trim() || 'Non renseigné';
+      const entreprise    = row[2]?.trim();
+      const contact       = row[3]?.trim();
+      const dateRDV       = row[6]?.trim();
+      const rdvFaitPar    = row[7]?.trim();
+      const statut        = row[9]?.trim();
+      const resultat      = row[10]?.trim();
+      const dateSign      = row[11]?.trim();
+      const offre         = row[12]?.trim() || 'Non défini';
+      const caEst         = parseAmount(row[13]);
+      const ca            = parseAmount(row[14]);
+      const coachAttribue = row[15]?.trim(); // col P — coach attribué
+      const dateFin       = row[19]?.trim(); // col T
 
       if (!prisPar) return;
       const coach     = coaches.find(c => rdvFaitPar === c) || coaches.find(c => prisPar === c);
@@ -148,21 +158,26 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         }
       }
 
-      // Deals en cours (toutes périodes) — nouveaux statuts
+      // Deals en cours (toutes périodes)
       if (statut === 'Réalisé' && isPipeActif) {
         const priorite = resultat === 'Chaud' ? 0 : resultat === 'A recaler' ? 1 : 2;
         dealsEnCours.push({ entreprise, contact, coach: rdvFaitPar || prisPar, date: dateRDV, offre, caEst, statut: resultat, priorite });
-        if (resultat === 'Chaud') pipeTotal += caEst; // pipe = Chaud uniquement
+        if (resultat === 'Chaud') pipeTotal += caEst;
       }
 
-      // Fin d'accompagnement — deals Gagné avec date de fin dans les 30 prochains jours
+      // Fin d'accompagnement — utilise coachAttribue (col P) en priorité
       if (resultat === 'Gagné' && dateFin) {
         const dateFinJS = toJSDate(dateFin);
         if (dateFinJS && dateFinJS >= now && dateFinJS <= in30) {
           const joursRestants = Math.ceil((dateFinJS - now) / (1000 * 60 * 60 * 24));
           finAccompagnement.push({
-            entreprise, contact, coach: rdvFaitPar || prisPar,
-            dateFin, joursRestants, ca, offre
+            entreprise,
+            contact,
+            coach: coachAttribue || rdvFaitPar || prisPar, // coach attribué en priorité
+            dateFin,
+            joursRestants,
+            ca,
+            offre,
           });
         }
       }
@@ -200,13 +215,11 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         }
       }
 
-      // RDV pris sur la période — basé sur prisPar uniquement (col A)
       if (coachPris && matchesPeriode(dateRDV, periodeKey)) {
         result.tous.rdvTous++;
         result[coachPris].rdvTous++;
       }
 
-      // Période courante
       const dateRef = resultat === 'Gagné' ? (dateSign || dateRDV) : dateRDV;
       if (matchesPeriode(dateRef, periodeKey)) {
         const isNoshow  = statut === 'No show';
@@ -214,13 +227,10 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         const isGagne   = isRealise && resultat === 'Gagné';
         const isPerdu   = isRealise && resultat === 'Perdu';
         const isEnCours = isRealise && isPipeActif;
-
         accumulate(result, isRealise, isGagne, isPerdu, isEnCours, isNoshow, ca, caEst, coachPris);
-
         if (isGagne) dealsGagnes.push({ entreprise, contact, coach: rdvFaitPar || prisPar, ca, date: dateSign || dateRDV, offre });
       }
 
-      // Période précédente
       if (precPeriodeKey) {
         const dateRefPrec = resultat === 'Gagné' ? (dateSign || dateRDV) : dateRDV;
         if (matchesPeriode(dateRefPrec, precPeriodeKey)) {
@@ -241,9 +251,7 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
       return db.localeCompare(da);
     });
 
-    // Tri deals en cours : Chaud > A recaler > Froid
     dealsEnCours.sort((a, b) => a.priorite - b.priorite);
-    // Tri fins d'accompagnement : plus urgent en premier
     finAccompagnement.sort((a, b) => a.joursRestants - b.joursRestants);
 
     result._dealsGagnes        = sortByDate(dealsGagnes);
