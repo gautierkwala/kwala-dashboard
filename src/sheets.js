@@ -15,7 +15,7 @@ async function fetchSheet(sheetId, range) {
 
 export function parseAmount(str) {
   if (!str) return 0;
-  const clean = String(str).replace(/[€\s]/g, '').replace(',', '.');
+  const clean = String(str).replace(/[â‚¬\s]/g, '').replace(',', '.');
   const val = parseFloat(clean);
   return isNaN(val) ? 0 : val;
 }
@@ -89,26 +89,14 @@ function isLast3Months(dateStr) {
   return new Date(d.year, d.month, 1) >= limit;
 }
 
+// Statuts "pipe actif" â€” remplace "En cours"
 const STATUTS_PIPE = ['Chaud', 'Froid', 'A recaler'];
-
-// Lit le nombre de témoignages depuis la cellule Q3 de l'onglet Trustfolio
-export async function fetchTrustfolioCount() {
-  try {
-    const values = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Trustfolio!Q3');
-    const raw = values?.[0]?.[0];
-    const count = parseInt(raw);
-    return isNaN(count) ? 0 : count;
-  } catch (e) {
-    console.error('fetchTrustfolioCount error:', e);
-    return 0;
-  }
-}
 
 export async function fetchRDVData(periodeKey, precPeriodeKey) {
   try {
-    // Col A→T (index 0→19)
+    // Lire jusqu'Ã  col T (index 19) pour rÃ©cupÃ©rer date dÃ©but/fin
     const rows = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Liste des rendez-vous Equipe!A2:T500');
-    const coaches = ['Alexis', 'Gautier', 'Mathilde', 'Jenny', 'Rémi'];
+    const coaches = ['Alexis', 'Gautier', 'Mathilde', 'Jenny', 'RÃ©mi'];
 
     const result = { tous: emptyStats() };
     const prec   = { tous: emptyStats() };
@@ -126,20 +114,22 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
     const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     rows.forEach(row => {
-      const prisPar       = row[0]?.trim();
-      const origine       = row[1]?.trim() || 'Non renseigné';
-      const entreprise    = row[2]?.trim();
-      const contact       = row[3]?.trim();
-      const dateRDV       = row[6]?.trim();
-      const rdvFaitPar    = row[7]?.trim();
-      const statut        = row[9]?.trim();
-      const resultat      = row[10]?.trim();
-      const dateSign      = row[11]?.trim();
-      const offre         = row[12]?.trim() || 'Non défini';
-      const caEst         = parseAmount(row[13]);
-      const ca            = parseAmount(row[14]);
-      const coachAttribue = row[15]?.trim(); // col P — coach attribué
-      const dateFin       = row[19]?.trim(); // col T
+      const prisPar    = row[0]?.trim();
+      const origine    = row[1]?.trim() || 'Non renseignÃ©';
+      const entreprise = row[2]?.trim();
+      const contact    = row[3]?.trim();
+      const dateRDV    = row[6]?.trim();
+      const rdvFaitPar = row[7]?.trim();
+      const statut     = row[9]?.trim();
+      const resultat   = row[10]?.trim();
+      const dateSign   = row[11]?.trim();
+      const offre      = row[12]?.trim() || 'Non dÃ©fini';
+      const caEst      = parseAmount(row[13]);
+      const ca         = parseAmount(row[14]);
+      // col P (15) = Coach attribuÃ© â€” ignorÃ©
+      // col Q (16) = Envoi notif â€” ignorÃ©
+      // col R (17) = Commentaire â€” ignorÃ©
+      const dateFin    = row[19]?.trim(); // col T
 
       if (!prisPar) return;
       const coach     = coaches.find(c => rdvFaitPar === c) || coaches.find(c => prisPar === c);
@@ -148,51 +138,52 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
 
       const isPipeActif = STATUTS_PIPE.includes(resultat);
 
-      // Origines (toutes périodes)
+      // Origines (toutes pÃ©riodes)
       if (statut !== 'A venir') {
         if (!originesMap[origine]) originesMap[origine] = { pris: 0, realises: 0, gagnes: 0, ca: 0 };
         originesMap[origine].pris++;
-        if (statut === 'Réalisé') {
+        if (statut === 'RÃ©alisÃ©') {
           originesMap[origine].realises++;
-          if (resultat === 'Gagné') { originesMap[origine].gagnes++; originesMap[origine].ca += ca; }
+          if (resultat === 'GagnÃ©') { originesMap[origine].gagnes++; originesMap[origine].ca += ca; }
         }
       }
 
-      // Deals en cours (toutes périodes)
-      if (statut === 'Réalisé' && isPipeActif) {
+      // Deals en cours (toutes pÃ©riodes) â€” nouveaux statuts
+      if (statut === 'RÃ©alisÃ©' && isPipeActif) {
         const priorite = resultat === 'Chaud' ? 0 : resultat === 'A recaler' ? 1 : 2;
         dealsEnCours.push({ entreprise, contact, coach: rdvFaitPar || prisPar, date: dateRDV, offre, caEst, statut: resultat, priorite });
-        if (resultat === 'Chaud') pipeTotal += caEst;
+        if (resultat === 'Chaud') pipeTotal += caEst; // pipe = Chaud uniquement
       }
 
-      // Fin d'accompagnement — utilise coachAttribue (col P) en priorité
-      if (resultat === 'Gagné' && dateFin) {
+      // Fin d'accompagnement â€” deals GagnÃ© avec date de fin dans les 30 prochains jours
+      if (resultat === 'GagnÃ©' && dateFin) {
         const dateFinJS = toJSDate(dateFin);
         if (dateFinJS && dateFinJS >= now && dateFinJS <= in30) {
           const joursRestants = Math.ceil((dateFinJS - now) / (1000 * 60 * 60 * 24));
           finAccompagnement.push({
-            entreprise,
-            contact,
-            coach: coachAttribue || rdvFaitPar || prisPar, // coach attribué en priorité
-            dateFin,
-            joursRestants,
-            ca,
-            offre,
+            entreprise, contact, coach: rdvFaitPar || prisPar,
+            dateFin, joursRestants, ca, offre
           });
         }
       }
 
-      // Offres — tout-temps
-      if (statut === 'Réalisé') {
+      // Offres â€” tout-temps
+      if (statut === 'RÃ©alisÃ©') {
         if (!offresMap[offre]) offresMap[offre] = { rdv: 0, gagnes: 0, perdus: 0, ca: 0 };
         offresMap[offre].rdv++;
-        if (resultat === 'Gagné')  { offresMap[offre].gagnes++; offresMap[offre].ca += ca; }
+        if (resultat === 'GagnÃ©')  { offresMap[offre].gagnes++; offresMap[offre].ca += ca; }
         if (resultat === 'Perdu')    offresMap[offre].perdus++;
       }
 
-      // Deals signés 3 derniers mois
-      if (statut === 'Réalisé' && resultat === 'Gagné' && isLast3Months(dateSign || dateRDV)) {
-        dealsGagnes3m.push({ entreprise, contact, coach: rdvFaitPar || prisPar, ca, date: dateSign || dateRDV, offre });
+      // Deals signÃ©s 3 derniers mois
+      if (statut === 'RÃ©alisÃ©' && resultat === 'GagnÃ©' && isLast3Months(dateSign || dateRDV)) {
+        let delai = null;
+        if (dateSign && dateRDV) {
+          const d1 = toJSDate(dateRDV);
+          const d2 = toJSDate(dateSign);
+          if (d1 && d2 && d2 >= d1) delai = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+        }
+        dealsGagnes3m.push({ entreprise, contact, coach: rdvFaitPar || prisPar, ca, date: dateSign || dateRDV, offre, delai });
       }
 
       function accumulate(target, rdv, isGagne, isPerdu, isEnCours, isNoshow, caVal, caEstVal, pris) {
@@ -215,29 +206,34 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         }
       }
 
+      // RDV pris sur la pÃ©riode â€” basÃ© sur prisPar uniquement (col A)
       if (coachPris && matchesPeriode(dateRDV, periodeKey)) {
         result.tous.rdvTous++;
         result[coachPris].rdvTous++;
       }
 
-      const dateRef = resultat === 'Gagné' ? (dateSign || dateRDV) : dateRDV;
+      // PÃ©riode courante
+      const dateRef = resultat === 'GagnÃ©' ? (dateSign || dateRDV) : dateRDV;
       if (matchesPeriode(dateRef, periodeKey)) {
         const isNoshow  = statut === 'No show';
-        const isRealise = statut === 'Réalisé';
-        const isGagne   = isRealise && resultat === 'Gagné';
+        const isRealise = statut === 'RÃ©alisÃ©';
+        const isGagne   = isRealise && resultat === 'GagnÃ©';
         const isPerdu   = isRealise && resultat === 'Perdu';
         const isEnCours = isRealise && isPipeActif;
+
         accumulate(result, isRealise, isGagne, isPerdu, isEnCours, isNoshow, ca, caEst, coachPris);
+
         if (isGagne) dealsGagnes.push({ entreprise, contact, coach: rdvFaitPar || prisPar, ca, date: dateSign || dateRDV, offre });
       }
 
+      // PÃ©riode prÃ©cÃ©dente
       if (precPeriodeKey) {
-        const dateRefPrec = resultat === 'Gagné' ? (dateSign || dateRDV) : dateRDV;
+        const dateRefPrec = resultat === 'GagnÃ©' ? (dateSign || dateRDV) : dateRDV;
         if (matchesPeriode(dateRefPrec, precPeriodeKey)) {
           const isNoshow  = statut === 'No show';
-          const isRealise = statut === 'Réalisé';
+          const isRealise = statut === 'RÃ©alisÃ©';
           accumulate(prec, isRealise,
-            isRealise && resultat === 'Gagné',
+            isRealise && resultat === 'GagnÃ©',
             isRealise && resultat === 'Perdu',
             isRealise && STATUTS_PIPE.includes(resultat),
             isNoshow, ca, caEst, coachPris);
@@ -251,7 +247,9 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
       return db.localeCompare(da);
     });
 
+    // Tri deals en cours : Chaud > A recaler > Froid
     dealsEnCours.sort((a, b) => a.priorite - b.priorite);
+    // Tri fins d'accompagnement : plus urgent en premier
     finAccompagnement.sort((a, b) => a.joursRestants - b.joursRestants);
 
     result._dealsGagnes        = sortByDate(dealsGagnes);
