@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { fetchRDVData, getPrecPeriode } from "./sheets";
+import { fetchRDVData, getPrecPeriode, fetchTrustfolioData } from "./sheets";
 
 const LOGO = "/logo.jpeg";
 const COACHES = ['Alexis', 'Rémi', 'Mathilde', 'Jenny', 'Gautier'];
@@ -144,6 +144,15 @@ const CSS = `
 
   .alert-card { background: #FFF8E1; border: 1.5px solid #F59E0B; border-radius: 12px; padding: 12px 14px; }
   .alert-card .tcard-title { color: #92400E; }
+
+  .trust-card { background: linear-gradient(135deg, #0D1B2A 0%, #1D9E75 100%); border-radius: 14px; padding: 18px 20px; color: #fff; }
+  .trust-hdr { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .trust-title { font-size: 13px; font-weight: 600; }
+  .trust-count { font-size: 13px; font-weight: 600; opacity: 0.9; }
+  .trust-bar-bg { width: 100%; height: 14px; background: rgba(255,255,255,0.18); border-radius: 20px; overflow: hidden; }
+  .trust-bar-fill { height: 100%; background: #fff; border-radius: 20px; transition: width 0.8s cubic-bezier(.4,0,.2,1); display: flex; align-items: center; justify-content: flex-end; }
+  .trust-pct { font-size: 11px; font-weight: 700; color: #0D1B2A; padding: 0 8px; }
+  .trust-sub { font-size: 11px; opacity: 0.85; margin-top: 8px; }
 
   .link-btn { font-size: 10px; color: var(--txt2); text-decoration: none; border: 0.5px solid var(--bdr); border-radius: 6px; padding: 2px 7px; }
   .link-btn:hover { color: var(--txt); }
@@ -338,6 +347,28 @@ function OffresTable({ offresMap }) {
   );
 }
 
+function TrustfolioBar({ data }) {
+  if (!data || !data.objectif) return null;
+  const pct = Math.min(100, Math.round((data.actuel / data.objectif) * 100));
+  const reste = Math.max(0, data.objectif - data.actuel);
+  return (
+    <div className="trust-card">
+      <div className="trust-hdr">
+        <span className="trust-title">🏆 Témoignages clients</span>
+        <span className="trust-count">{data.actuel} / {data.objectif}</span>
+      </div>
+      <div className="trust-bar-bg">
+        <div className="trust-bar-fill" style={{ width: `${pct}%` }}>
+          {pct > 12 && <span className="trust-pct">{pct}%</span>}
+        </div>
+      </div>
+      <div className="trust-sub">
+        {reste > 0 ? `Encore ${reste} témoignages pour atteindre l'objectif 🚀` : `🎉 Objectif atteint !`}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const now = new Date();
   const [year, setYear]               = useState(now.getFullYear());
@@ -346,6 +377,7 @@ export default function App() {
   const [coach, setCoach]             = useState('tous');
   const [data, setData]               = useState(null);
   const [loading, setLoading]         = useState(true);
+  const [trustfolio, setTrustfolio]   = useState(null);
 
   const isApporteur    = COACHES_APPORTEURS.includes(coach);
   const periodeKey     = getPeriodeKey(granularite, year, month);
@@ -356,6 +388,10 @@ export default function App() {
     setLoading(true);
     fetchRDVData(periodeKey, precPeriodeKey).then(d => { setData(d); setLoading(false); });
   }, [periodeKey]);
+
+  useEffect(() => {
+    fetchTrustfolioData().then(setTrustfolio);
+  }, []);
 
   const stats = useMemo(() => {
     if (!data) return null;
@@ -656,6 +692,9 @@ export default function App() {
                 }
                 <OffresTable offresMap={data?._offres || {}} />
               </div>
+
+              {/* 6. TRUSTFOLIO — indépendant des filtres */}
+              <TrustfolioBar data={trustfolio} />
 
             </div>
           </div>

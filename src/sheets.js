@@ -267,3 +267,18 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
     return null;
   }
 }
+
+// ─── TRUSTFOLIO — barre de progression témoignages ──────────────────────────
+export async function fetchTrustfolioData() {
+  try {
+    const rows = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Trustfolio!P2:Q3');
+    // Ligne 2 : Objectif | 100
+    // Ligne 3 : Actuellement | 42
+    const objectif = parseInt(rows?.[0]?.[1]) || 0;
+    const actuel   = parseInt(rows?.[1]?.[1]) || 0;
+    return { objectif, actuel };
+  } catch (e) {
+    console.error('fetchTrustfolioData error:', e);
+    return null;
+  }
+}
