@@ -115,21 +115,21 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
 
     rows.forEach(row => {
       const prisPar    = row[0]?.trim();
-      const origine    = row[1]?.trim() || 'Non renseigné';
-      const entreprise = row[2]?.trim();
-      const contact    = row[3]?.trim();
+      const origine    = row[2]?.trim() || 'Non renseigné';
+      const entreprise = row[3]?.trim();
+      const contact    = row[4]?.trim();
       const dateRDV    = row[6]?.trim();
       const rdvFaitPar = row[7]?.trim();
-      const statut     = row[9]?.trim();
-      const resultat   = row[10]?.trim();
-      const dateSign   = row[11]?.trim();
-      const offre      = row[12]?.trim() || 'Non défini';
-      const caEst      = parseAmount(row[13]);
-      const ca         = parseAmount(row[14]);
+      const statut     = row[10]?.trim();
+      const caEst      = parseAmount(row[12]);
+      const resultat   = row[13]?.trim();
+      const dateSign   = row[14]?.trim();
+      const offre      = row[11]?.trim() || 'Non défini';
       // col P (15) = Coach attribué — ignoré
-      // col Q (16) = Envoi notif — ignoré
-      // col R (17) = Commentaire — ignoré
-      const dateFin    = row[19]?.trim(); // col T
+      const ca         = parseAmount(row[16]);
+      // col R (17) = Date de début — non utilisée pour l'instant
+      const dateFin    = row[18]?.trim(); // col S = Date de fin
+      // col T (19) = Envoi notif Deal — ignoré
 
       if (!prisPar) return;
       const coach     = coaches.find(c => rdvFaitPar === c) || coaches.find(c => prisPar === c);
