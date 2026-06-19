@@ -269,6 +269,7 @@ function FinAccompagnementTable({ data }) {
         <span className="tcard-title">⚠️ Fins d'accompagnement proches</span>
         <span className="tcard-sub" style={{ color: '#92400E' }}>{data.length} client{data.length > 1 ? 's' : ''} · dans les 30 jours</span>
       </div>
+      <div className="tbl-wrap">
       <table>
         <thead>
           <tr>
@@ -298,6 +299,7 @@ function FinAccompagnementTable({ data }) {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -316,6 +318,7 @@ function OffresTable({ offresMap }) {
         <span className="tcard-title">Performance par offre</span>
         <span className="tcard-sub">toutes périodes</span>
       </div>
+      <div className="tbl-wrap">
       <table>
         <thead>
           <tr>
@@ -343,6 +346,7 @@ function OffresTable({ offresMap }) {
           })}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
