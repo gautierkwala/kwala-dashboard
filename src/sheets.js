@@ -271,11 +271,10 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
 // ─── TRUSTFOLIO — barre de progression témoignages ──────────────────────────
 export async function fetchTrustfolioData() {
   try {
-    const rows = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Trustfolio!P2:Q3');
-    // Ligne 2 : Objectif | 100
-    // Ligne 3 : Actuellement | 42
-    const objectif = parseInt(rows?.[0]?.[1]) || 0;
-    const actuel   = parseInt(rows?.[1]?.[1]) || 0;
+    const rows = await fetchSheet(SHEETS_IDS.PROSPECTION, 'Trustfolio!O2:O3');
+    // O2 : 100 (objectif), O3 : 45 (actuel)
+    const objectif = parseInt(rows?.[0]?.[0]) || 0;
+    const actuel   = parseInt(rows?.[1]?.[0]) || 0;
     return { objectif, actuel };
   } catch (e) {
     console.error('fetchTrustfolioData error:', e);
