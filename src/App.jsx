@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { fetchRDVData, getPrecPeriode, fetchTrustfolioData } from "./sheets";
+import { fetchRDVData, getPrecPeriode, estChaud } from "./airtable";
+import { fetchTrustfolioData } from "./sheets";
 
 const LOGO = "/logo.jpeg";
 const COACHES = ['Alexis', 'Rémi', 'Mathilde', 'Jenny', 'Gautier'];
@@ -9,15 +10,16 @@ const COACH_COLORS = {
 };
 const OFFRE_BADGE = {
   'Equipe':       { bg: '#FAEEDA', color: '#854F0B' },
-  'Entrepreneur': { bg: '#E6F1FB', color: '#185FA5' },
+  'Dirigeant':    { bg: '#E6F1FB', color: '#185FA5' },
   'Prescripteur': { bg: '#E1F5EE', color: '#0F6E56' },
 };
 const STATUT_PIPE_BADGE = {
+  'Closing':   { bg: '#FDECEA', color: '#C0392B', icon: '🔥' },
   'Chaud':     { bg: '#FDECEA', color: '#C0392B', icon: '🔥' },
   'Froid':     { bg: '#EAF0FB', color: '#2E5FA3', icon: '🧊' },
-  'A recaler': { bg: '#FEF6E4', color: '#7D5A00', icon: '📅' },
+  'En cours':  { bg: '#FEF6E4', color: '#7D5A00', icon: '📅' },
 };
-const SHEET_URL = 'https://docs.google.com/spreadsheets/d/13r_qAdwCmtdriilX1nzL56r0eEaDX4fDw4vZx3pvfUM/edit';
+const SOURCE_URL = 'https://airtable.com/appAb5Ivl3iph8OjL/tblr97WEyGgNfCkHi/viwPEUc63RLwWoZNJ';
 const COACHES_APPORTEURS = ['Alexis', 'Rémi'];
 
 const OBJ_CA_EQUIPE    = 30000;
@@ -242,7 +244,7 @@ function DealsEnCoursTable({ data }) {
         </thead>
         <tbody>
           {sorted.map((d, i) => (
-            <tr key={i} style={d.statut === 'Chaud' ? { background: '#FFFBF5' } : {}}>
+            <tr key={i} style={estChaud(d.statut) ? { background: '#FFFBF5' } : {}}>
               <td><StatutBadge statut={d.statut} /></td>
               <td>{d.contact || '—'}</td>
               <td>{d.entreprise || '—'}</td>
@@ -305,7 +307,7 @@ function FinAccompagnementTable({ data }) {
 }
 
 function OffresTable({ offresMap }) {
-  const OFFRES_CIBLES = ['Equipe', 'Entrepreneur'];
+  const OFFRES_CIBLES = ['Equipe', 'Dirigeant'];
   const rows = OFFRES_CIBLES.map(offre => {
     const o = offresMap[offre] || { rdv: 0, gagnes: 0, perdus: 0, ca: 0 };
     const taux = o.gagnes + o.perdus > 0 ? Math.round((o.gagnes / (o.gagnes + o.perdus)) * 100) : null;
@@ -441,13 +443,13 @@ export default function App() {
   const pipeTotal = useMemo(() => {
     if (!data?._dealsEnCours) return 0;
     const deals = coach === 'tous' ? data._dealsEnCours : data._dealsEnCours.filter(d => d.coach === coach);
-    return deals.filter(d => d.statut === 'Chaud').reduce((sum, d) => sum + (d.caEst || 0), 0);
+    return deals.filter(d => estChaud(d.statut)).reduce((sum, d) => sum + (d.caEst || 0), 0);
   }, [data, coach]);
 
   const pipeCount = useMemo(() => {
     if (!data?._dealsEnCours) return 0;
     const deals = coach === 'tous' ? data._dealsEnCours : data._dealsEnCours.filter(d => d.coach === coach);
-    return deals.filter(d => d.statut === 'Chaud').length;
+    return deals.filter(d => estChaud(d.statut)).length;
   }, [data, coach]);
 
   const dealsEnCoursFiltres = useMemo(() => {
@@ -495,7 +497,7 @@ export default function App() {
               ))}
             </div>
             <div className="vsep" />
-            <a href={SHEET_URL} target="_blank" rel="noreferrer" className="link-btn">↗ Sheet</a>
+            <a href={SOURCE_URL} target="_blank" rel="noreferrer" className="link-btn">↗ Airtable</a>
           </div>
         </div>
 
@@ -594,7 +596,7 @@ export default function App() {
                 <div className="kpi">
                   <div className="kpi-lbl">Pipe en cours</div>
                   <div className="kpi-val">{fmtCA(pipeTotal)}</div>
-                  <div className="kpi-trend neu">{pipeCount} deal{pipeCount > 1 ? 's' : ''} chauds · tous mois</div>
+                  <div className="kpi-trend neu">{pipeCount} deal{pipeCount > 1 ? 's' : ''} en closing · tous mois</div>
                 </div>
               </div>
 

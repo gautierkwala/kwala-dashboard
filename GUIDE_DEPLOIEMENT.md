@@ -1,7 +1,7 @@
 # Guide de déploiement — Kwala Dashboard
 
 ## Ce que tu vas avoir au bout de 30 min
-Une app web accessible depuis ton téléphone et ton PC, connectée à tes Google Sheets, avec tes deux vues (Gestion + Performance commerciale) et tous les filtres.
+Une app web accessible depuis ton téléphone et ton PC, connectée à ta base Airtable, avec tes deux vues (Gestion + Performance commerciale) et tous les filtres.
 
 ---
 
@@ -36,45 +36,52 @@ git push -u origin main
 
 ---
 
-## Étape 3 — Connecter Google Sheets (15 min)
+## Étape 3 — Connecter Airtable (10 min)
 
-### 3a — Créer une clé API Google
+### 3a — Créer un token Airtable
 
-1. Va sur **console.cloud.google.com**
-2. Crée un nouveau projet : "Kwala Dashboard"
-3. Menu gauche → **"APIs & Services"** → **"Enable APIs"**
-4. Cherche **"Google Sheets API"** → Active-la
-5. Menu gauche → **"Credentials"** → **"Create Credentials"** → **"API Key"**
-6. Copie la clé générée (commence par `AIza...`)
+1. Va sur **airtable.com/create/tokens** → **"Create new token"**
+2. Nom : `kwala-dashboard`
+3. **Scopes** : coche `data.records:read` **et rien d'autre**
+4. **Access** : sélectionne uniquement la base **Kwala CRM** (`appAb5Ivl3iph8OjL`)
+5. Clique **"Create token"** et copie-le (il ne sera plus jamais réaffiché)
 
-### 3b — Rendre tes Sheets accessibles en lecture
+⚠️ Ce token ne doit jamais être collé dans le code ni dans une variable
+`REACT_APP_*` : tout ce qui commence par `REACT_APP_` se retrouve en clair dans
+le navigateur de n'importe quel visiteur. Il est lu uniquement côté serveur par
+la fonction `api/opportunites.js`.
 
-Pour chaque Google Sheet (pilotage + fichiers coachs) :
-1. Ouvre le fichier Google Sheets
-2. Clique **"Partager"** (en haut à droite)
-3. Change en **"Toute personne ayant le lien peut consulter"**
-4. Copie l'ID dans l'URL : `docs.google.com/spreadsheets/d/**ID_ICI**/edit`
+### 3b — Le déclarer dans Vercel
 
-### 3c — Mettre à jour le code
+1. Vercel → ton projet → **"Settings"** → **"Environment Variables"**
+2. Ajoute :
+   - Name : `AIRTABLE_TOKEN`
+   - Value : le token copié à l'étape 3a
+   - Environments : Production, Preview et Development
+3. Ajoute aussi `REACT_APP_GOOGLE_API_KEY` (clé Google Sheets en lecture seule) —
+   elle ne sert plus qu'à la barre de progression Trustfolio.
+4. Onglet **"Deployments"** → sur le dernier déploiement, **"Redeploy"**
+   (les variables d'environnement ne sont prises en compte qu'au build suivant)
 
-Dans `src/App.jsx`, ligne 8-12, remplace :
+### 3c — Vérifier
 
-```javascript
-const SHEETS_CONFIG = {
-  PILOTAGE_SHEET_ID: 'TON_SHEET_ID_PILOTAGE',   // ← colle l'ID ici
-  MATHILDE_SHEET_ID: 'TON_SHEET_ID_MATHILDE',   // ← colle l'ID ici
-  API_KEY: 'TA_CLE_API_GOOGLE',                  // ← colle la clé ici
-};
-```
+Ouvre `https://TON-APP.vercel.app/api/opportunites` dans le navigateur : tu dois
+voir un JSON commençant par `{"rows":[...`. Si tu vois `AIRTABLE_TOKEN manquant`,
+la variable n'est pas déclarée ou le redéploiement n'a pas été fait.
 
-Puis dans le terminal :
+---
+
+## Développement local
+
+`npm start` ne sert pas les fonctions `/api`. Pour tester en local avec la vraie
+source de données :
+
 ```bash
-git add .
-git commit -m "connexion google sheets"
-git push
+npm i -g vercel
+vercel dev
 ```
 
-Vercel redéploie automatiquement en 1 min. ✅
+
 
 ---
 
@@ -104,7 +111,7 @@ L'app affichera automatiquement la bonne vue selon qui est connecté.
 ## Mise à jour des données
 
 **Aujourd'hui** : les données sont statiques (copiées de tes fichiers).
-**Prochaine étape** : connecter l'API Google Sheets pour un rafraîchissement automatique toutes les 5 minutes.
+Les données viennent d'Airtable (table Opportunités) via `api/opportunites.js`, avec un cache CDN de 60 s.
 
 Je te génère le code de connexion API dès que le déploiement de base tourne.
 
