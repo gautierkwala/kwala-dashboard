@@ -30,7 +30,10 @@ const F = {
   resultat:   'fldDHXjU5wAC5hzZ2', // Résultat        (select)
   dateSign:   'fldcxC5jK2lApO0tO', // Date décision   (date)
   caSigne:    'fldquAjtat7xky00C', // CA signé        (currency)
-  dateFin:    'fldCx7gYEAYIH6xdR', // Date de fin     (date)
+  // On lit le champ calculé « Fin d'accompagnement » et non « Date de fin » :
+  // il retombe sur Date de début + 6 mois quand la date n'a pas été saisie,
+  // sans quoi l'alerte « fins d'accompagnement » rate tous les deals récents.
+  dateFin:    'fldCawyH25gr9sqYE', // Fin d'accompagnement (formule)
 };
 
 // Champ principal de chaque table liée — c'est le libellé qu'on veut afficher.
