@@ -121,9 +121,14 @@ export default async function handler(req, res) {
       };
     });
 
-    // Cache CDN : le dashboard peut être ouvert par plusieurs coachs en même
-    // temps sans taper Airtable à chaque fois (limite de 5 req/s par base).
-    res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
+    // Cache CDN calé sur la cadence de la synchro agenda (15 min) : au-delà,
+    // revalider plus souvent ne montrerait rien de neuf et brûlerait du quota.
+    //
+    // Un chargement non caché coûte ~9 appels Airtable (opportunités, coachs,
+    // entreprises et contacts, paginés par 100). Avec l'ancien cache d'1 minute,
+    // un dashboard laissé ouvert consommait jusqu'à 13 000 appels par jour et a
+    // contribué à saturer le quota du forfait le 03/09/2026.
+    res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=3600');
     return res.status(200).json({ rows });
   } catch (e) {
     console.error('api/opportunites:', e);
