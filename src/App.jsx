@@ -29,15 +29,57 @@ const OBJ_CA_COACH    = { Mathilde: 15000, Jenny: 15000, Gautier: 10000, Alexis:
 const OBJ_RDV_COACH   = { Jenny: 10, Mathilde: 10, Gautier: 10, Alexis: 20, Rémi: 20 };
 const OBJ_DEALS_COACH = { Jenny: 4, Mathilde: 4, Gautier: 2, Alexis: 4, Rémi: 4 };
 
-function getObjectifs(granularite, coach) {
-  const now = new Date();
-  let factor = 1;
-  if (granularite === 'trimestre') factor = 3;
-  else if (granularite === 'ytd') factor = now.getMonth() + 1;
-  const caBase    = coach !== 'tous' ? (OBJ_CA_COACH[coach]    ?? OBJ_CA_EQUIPE)    : OBJ_CA_EQUIPE;
-  const rdvBase   = coach !== 'tous' ? (OBJ_RDV_COACH[coach]   ?? OBJ_RDV_EQUIPE)   : OBJ_RDV_EQUIPE;
-  const dealsBase = coach !== 'tous' ? (OBJ_DEALS_COACH[coach] ?? OBJ_DEALS_EQUIPE) : OBJ_DEALS_EQUIPE;
-  return { ca: caBase * factor, rdv: rdvBase * factor, deals: dealsBase * factor };
+// Objectifs mensuels dérogatoires, issus des plans d'action de rentrée 2026.
+// Une entrée écrase l'objectif mensuel par défaut pour ce coach et ce mois-là.
+// Les mois absents retombent sur OBJ_*_COACH.
+//
+// Les ventes du plan sont fractionnaires (Mathilde vise 3,9 puis 4,68 ventes,
+// c'est un taux de transfo appliqué au nombre de RDV). On les arrondit : la
+// jauge compte des deals entiers, et « il reste 0,9 vente » n'aide personne.
+const OBJ_MENSUELS = {
+  Mathilde: {                                  // objectif annuel 107 300 €
+    '2026-09': { ca: 14820, rdv: 10, deals: 4 },   // plan : 3,9 ventes
+    '2026-10': { ca: 17784, rdv: 12, deals: 5 },   // plan : 4,68
+    '2026-11': { ca: 17784, rdv: 12, deals: 5 },   // plan : 4,68
+    '2026-12': { ca:  8892, rdv:  6, deals: 2 },   // plan : 2,34
+  },
+  Jenny: {                                     // objectif annuel 90 000 €
+    '2026-09': { ca: 20000, rdv: 16, deals: 5 },
+    '2026-10': { ca: 16000, rdv: 13, deals: 4 },
+    '2026-11': { ca: 22000, rdv: 15, deals: 3 },
+    '2026-12': { ca: 15000, rdv: 10, deals: 3 },
+  },
+};
+
+function objectifMois(coach, year, month) {
+  const cle = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const derogation = OBJ_MENSUELS[coach] && OBJ_MENSUELS[coach][cle];
+  if (derogation) return derogation;
+  return {
+    ca:    coach !== 'tous' ? (OBJ_CA_COACH[coach]    ?? OBJ_CA_EQUIPE)    : OBJ_CA_EQUIPE,
+    rdv:   coach !== 'tous' ? (OBJ_RDV_COACH[coach]   ?? OBJ_RDV_EQUIPE)   : OBJ_RDV_EQUIPE,
+    deals: coach !== 'tous' ? (OBJ_DEALS_COACH[coach] ?? OBJ_DEALS_EQUIPE) : OBJ_DEALS_EQUIPE,
+  };
+}
+
+// L'objectif d'une période est la SOMME des objectifs de ses mois — et non
+// plus un objectif mensuel multiplié. C'est ce qui permet à un trimestre
+// contenant des mois à cibles différentes de tomber juste.
+function getObjectifs(granularite, coach, year, month) {
+  const mois = [];
+  if (granularite === 'trimestre') {
+    const premier = Math.floor(month / 3) * 3;
+    for (let m = premier; m < premier + 3; m++) mois.push(m);
+  } else if (granularite === 'ytd') {
+    for (let m = 0; m <= new Date().getMonth(); m++) mois.push(m);
+  } else {
+    mois.push(month);
+  }
+
+  return mois.reduce((acc, m) => {
+    const o = objectifMois(coach, year, m);
+    return { ca: acc.ca + o.ca, rdv: acc.rdv + o.rdv, deals: acc.deals + o.deals };
+  }, { ca: 0, rdv: 0, deals: 0 });
 }
 
 function getPeriodeKey(granularite, year, month) {
@@ -388,7 +430,7 @@ export default function App() {
   const isApporteur    = COACHES_APPORTEURS.includes(coach);
   const periodeKey     = getPeriodeKey(granularite, year, month);
   const precPeriodeKey = getPrecPeriode(periodeKey);
-  const obj            = getObjectifs(granularite, coach);
+  const obj            = getObjectifs(granularite, coach, year, month);
 
   useEffect(() => {
     setLoading(true);
