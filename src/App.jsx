@@ -1,11 +1,15 @@
 import { useState, useEffect, useMemo } from "react";
-import { fetchRDVData, getPrecPeriode, estChaud } from "./airtable";
+import { fetchRDVData, getPrecPeriode, estChaud, estEnCours, estPipeActif } from "./airtable";
 import { fetchTrustfolioData } from "./sheets";
 
 const LOGO = "/logo.jpeg";
-const COACHES = ['Alexis', 'Rémi', 'Mathilde', 'Jenny', 'Gautier'];
+// Rémi a quitté l'équipe le 21/09/2026. Retiré d'ici, il ne s'affiche plus
+// nulle part ; son historique reste compté (voir le commentaire dans
+// airtable.js). Pour le rétablir, le remettre dans cette liste et dans les
+// objectifs plus bas.
+const COACHES = ['Alexis', 'Mathilde', 'Jenny', 'Gautier'];
 const COACH_COLORS = {
-  Alexis: '#2E8BE6', Rémi: '#7F77DD', Mathilde: '#E8417E',
+  Alexis: '#2E8BE6', Rémi: '#7F77DD', Mathilde: '#E8417E',   // Rémi : anciens deals
   Jenny: '#BA7517', Gautier: '#1D9E75',
 };
 const OFFRE_BADGE = {
@@ -20,14 +24,14 @@ const STATUT_PIPE_BADGE = {
   'En cours':  { bg: '#FEF6E4', color: '#7D5A00', icon: '📅' },
 };
 const SOURCE_URL = 'https://airtable.com/appAb5Ivl3iph8OjL/tblr97WEyGgNfCkHi/viwPEUc63RLwWoZNJ';
-const COACHES_APPORTEURS = ['Alexis', 'Rémi'];
+const COACHES_APPORTEURS = ['Alexis'];
 
 const OBJ_CA_EQUIPE    = 30000;
 const OBJ_RDV_EQUIPE   = 20;
 const OBJ_DEALS_EQUIPE = 8;
-const OBJ_CA_COACH    = { Mathilde: 15000, Jenny: 15000, Gautier: 10000, Alexis: 20000, Rémi: 20000 };
-const OBJ_RDV_COACH   = { Jenny: 10, Mathilde: 10, Gautier: 10, Alexis: 20, Rémi: 20 };
-const OBJ_DEALS_COACH = { Jenny: 4, Mathilde: 4, Gautier: 2, Alexis: 4, Rémi: 4 };
+const OBJ_CA_COACH    = { Mathilde: 15000, Jenny: 15000, Gautier: 10000, Alexis: 20000 };
+const OBJ_RDV_COACH   = { Jenny: 10, Mathilde: 10, Gautier: 10, Alexis: 20 };
+const OBJ_DEALS_COACH = { Jenny: 4, Mathilde: 4, Gautier: 2, Alexis: 4 };
 
 // Objectifs mensuels dérogatoires, issus des plans d'action de rentrée 2026.
 // Une entrée écrase l'objectif mensuel par défaut pour ce coach et ce mois-là.
@@ -168,7 +172,7 @@ const CSS = `
   .pill-target { background: #E6F1FB; color: #0C447C; border-radius: 7px; padding: 5px 9px; font-size: 11px; font-weight: 600; text-align: center; }
   .pill-info { background: #F2F4F8; color: var(--txt2); border-radius: 7px; padding: 5px 9px; font-size: 11px; font-weight: 500; text-align: center; }
 
-  .kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .kpi-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
   .kpi { background: var(--surface); border: 0.5px solid var(--bdr); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; align-items: center; text-align: center; }
   .kpi-lbl { font-size: 10px; color: var(--txt2); margin-bottom: 5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.4px; }
   .kpi-val { font-size: 19px; font-weight: 600; line-height: 1; margin-bottom: 4px; }
@@ -481,22 +485,38 @@ export default function App() {
     return { label: `${diff >= 0 ? '+' : ''}${diff}pts vs période préc.`, up: diff >= 0 };
   })() : null;
 
-  // Pipe — filtré par coach, tout-temps
-  const pipeTotal = useMemo(() => {
-    if (!data?._dealsEnCours) return 0;
-    const deals = coach === 'tous' ? data._dealsEnCours : data._dealsEnCours.filter(d => d.coach === coach);
-    return deals.filter(d => estChaud(d.statut)).reduce((sum, d) => sum + (d.caEst || 0), 0);
-  }, [data, coach]);
+  // Cycle de vente : délai moyen RDV → signature des deals GAGNÉS de la
+  // période affichée. Un cycle qui raccourcit est une bonne nouvelle, donc
+  // la flèche est verte quand le nombre de jours BAISSE — l'inverse des
+  // autres indicateurs.
+  const cycleMoyen = stats?.delaiNb ? Math.round(stats.delaiSum / stats.delaiNb) : null;
+  const cyclePrec  = precStats?.delaiNb ? Math.round(precStats.delaiSum / precStats.delaiNb) : null;
+  const deltaCycle = (cycleMoyen != null && cyclePrec != null) ? (() => {
+    const diff = cycleMoyen - cyclePrec;
+    if (diff === 0) return { label: 'stable vs période préc.', up: true };
+    return { label: `${diff > 0 ? '+' : ''}${diff}j vs période préc.`, up: diff < 0 };
+  })() : null;
 
-  const pipeCount = useMemo(() => {
-    if (!data?._dealsEnCours) return 0;
+  // Pipe — filtré par coach, tout-temps. Froid exclu partout : seuls Closing
+  // et En cours remontent, avec leurs deux totaux séparés.
+  const pipe = useMemo(() => {
+    const vide = { closingCA: 0, closingNb: 0, encoursCA: 0, encoursNb: 0, totalCA: 0, totalNb: 0 };
+    if (!data?._dealsEnCours) return vide;
     const deals = coach === 'tous' ? data._dealsEnCours : data._dealsEnCours.filter(d => d.coach === coach);
-    return deals.filter(d => estChaud(d.statut)).length;
+    return deals.reduce((acc, d) => {
+      const ca = d.caEst || 0;
+      if (estChaud(d.statut))        { acc.closingCA += ca; acc.closingNb++; }
+      else if (estEnCours(d.statut)) { acc.encoursCA += ca; acc.encoursNb++; }
+      else return acc;                                    // Froid : ignoré
+      acc.totalCA += ca; acc.totalNb++;
+      return acc;
+    }, vide);
   }, [data, coach]);
 
   const dealsEnCoursFiltres = useMemo(() => {
     if (!data?._dealsEnCours) return [];
-    return coach === 'tous' ? data._dealsEnCours : data._dealsEnCours.filter(d => d.coach === coach);
+    const deals = coach === 'tous' ? data._dealsEnCours : data._dealsEnCours.filter(d => d.coach === coach);
+    return deals.filter(d => estPipeActif(d.statut));
   }, [data, coach]);
 
   const finAccompFiltres = useMemo(() => {
@@ -631,14 +651,28 @@ export default function App() {
                   <div className="kpi-trend"><Delta d={deltaConv} /></div>
                 </div>
                 <div className="kpi">
+                  <div className="kpi-lbl">Cycle de vente</div>
+                  <div className="kpi-val">{cycleMoyen != null ? `${cycleMoyen} j` : '—'}</div>
+                  <div className="kpi-trend">
+                    {cycleMoyen == null
+                      ? <span className="neu">aucun deal signé sur la période</span>
+                      : <Delta d={deltaCycle} />}
+                  </div>
+                </div>
+                <div className="kpi">
                   <div className="kpi-lbl">Panier moyen</div>
                   <div className="kpi-val">{fmtCA(panierMoyen)}</div>
                   <div className="kpi-trend neu">— pas de données préc.</div>
                 </div>
                 <div className="kpi">
-                  <div className="kpi-lbl">Pipe en cours</div>
-                  <div className="kpi-val">{fmtCA(pipeTotal)}</div>
-                  <div className="kpi-trend neu">{pipeCount} deal{pipeCount > 1 ? 's' : ''} en closing · tous mois</div>
+                  <div className="kpi-lbl">Pipe actif · hors froid</div>
+                  <div className="kpi-val">{fmtCA(pipe.totalCA)}</div>
+                  <div className="kpi-trend neu">
+                    <span style={{ color: '#C0392B', fontWeight: 600 }}>🔥 {fmtCA(pipe.closingCA)}</span>
+                    {' closing · '}
+                    <span style={{ color: '#7D5A00', fontWeight: 600 }}>📅 {fmtCA(pipe.encoursCA)}</span>
+                    {' en cours'}
+                  </div>
                 </div>
               </div>
 
@@ -647,7 +681,7 @@ export default function App() {
                 <div className="tcard-hdr">
                   <span className="tcard-title">Deals en cours</span>
                   <span className="tcard-sub">
-                    {pipeCount} deal{pipeCount > 1 ? 's' : ''} · pipe {fmtCA(pipeTotal)} · tous mois
+                    {pipe.closingNb} en closing {fmtCA(pipe.closingCA)} · {pipe.encoursNb} en cours {fmtCA(pipe.encoursCA)} · tous mois
                     {resteCA > 0 && <span style={{ color: '#185FA5', marginLeft: 8, fontWeight: 600 }}>🎯 Reste {fmtCA(resteCA)} à signer</span>}
                   </span>
                 </div>
@@ -665,7 +699,7 @@ export default function App() {
                         const avecDelai = (data?._dealsGagnes3m || []).filter(d => d.delai != null);
                         if (!avecDelai.length) return null;
                         const moy = Math.round(avecDelai.reduce((s, d) => s + d.delai, 0) / avecDelai.length);
-                        return <span style={{ marginLeft: 8, color: 'var(--blue)', fontWeight: 600 }}>· moy. {moy}j RDV→signature</span>;
+                        return <span style={{ marginLeft: 8, color: 'var(--blue)', fontWeight: 600 }}>· moy. {moy}j sur ces 3 mois</span>;
                       })()}
                     </span>
                   </div>

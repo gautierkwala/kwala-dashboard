@@ -23,6 +23,17 @@ export function estChaud(resultat) {
   return STATUTS_CHAUD.includes(resultat);
 }
 
+// Pipe actif = ce sur quoi on peut encore agir cette semaine : Closing et
+// En cours. Froid en est exclu — c'est du pipe dormant, qu'on ne veut plus
+// voir remonter dans les totaux ni dans le tableau.
+export function estEnCours(resultat) {
+  return resultat === 'En cours';
+}
+
+export function estPipeActif(resultat) {
+  return estChaud(resultat) || estEnCours(resultat);
+}
+
 export function parseAmount(v) {
   const n = Number(v);
   return isNaN(n) ? 0 : n;
@@ -90,6 +101,10 @@ function emptyStats() {
     gagnes: 0, gagnesPris: 0,
     encours: 0, perdus: 0, noshow: 0,
     ca: 0, caEncours: 0, caApporte: 0,
+    // Cycle de vente : on cumule les délais RDV → signature des deals gagnés
+    // de la période, pour en tirer une moyenne à l'affichage. Seuls les deals
+    // GAGNÉS comptent, et seulement ceux dont les deux dates sont connues.
+    delaiSum: 0, delaiNb: 0,
   };
 }
 
@@ -115,6 +130,10 @@ async function fetchOpportunites() {
 export async function fetchRDVData(periodeKey, precPeriodeKey) {
   try {
     const rows = await fetchOpportunites();
+    // Rémi ne fait plus partie de l'équipe et n'apparaît plus dans le tableau
+    // de bord (voir COACHES dans App.jsx), mais il reste ici : c'est cette
+    // liste qui décide si une opportunité est prise en compte. L'en retirer
+    // ferait disparaître de l'historique les 8 RDV dont il est l'apporteur.
     const coaches = ['Alexis', 'Gautier', 'Mathilde', 'Jenny', 'Rémi'];
 
     const result = { tous: emptyStats() };
@@ -194,21 +213,24 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         if (resultat === 'Perdu')    offresMap[offre].perdus++;
       }
 
+      // Délai RDV → signature, en jours. null si une des deux dates manque
+      // ou si la signature précède le rendez-vous (saisie incohérente).
+      let delai = null;
+      if (dateSign && dateRDV) {
+        const d1 = toJSDate(dateRDV);
+        const d2 = toJSDate(dateSign);
+        if (d1 && d2 && d2 >= d1) delai = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+      }
+
       // Deals signés 3 derniers mois
       if (statut === 'Réalisé' && resultat === 'Gagné' && isLast3Months(dateSign || dateRDV)) {
-        let delai = null;
-        if (dateSign && dateRDV) {
-          const d1 = toJSDate(dateRDV);
-          const d2 = toJSDate(dateSign);
-          if (d1 && d2 && d2 >= d1) delai = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
-        }
         dealsGagnes3m.push({
           entreprise, contact, coach: rdvFaitPar || prisPar, ca,
           date: fmtDateFR(dateSign || dateRDV), offre, delai
         });
       }
 
-      function accumulate(target, rdv, isGagne, isPerdu, isEnCours, isNoshow, caVal, caEstVal, pris) {
+      function accumulate(target, rdv, isGagne, isPerdu, isEnCours, isNoshow, caVal, caEstVal, pris, delaiVal) {
         if (isNoshow) { target.tous.noshow++; target[coach].noshow++; return; }
         if (rdv) {
           target.tous.rdv++; target[coach].rdv++;
@@ -219,6 +241,10 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
           target[coach].gagnes++; target[coach].ca += caVal;
           if (pris && target[pris]) {
             target[pris].gagnesPris++; target[pris].caApporte += caVal;
+          }
+          if (delaiVal != null) {
+            target.tous.delaiSum += delaiVal; target.tous.delaiNb++;
+            target[coach].delaiSum += delaiVal; target[coach].delaiNb++;
           }
         }
         if (isPerdu)   { target.tous.perdus++; target[coach].perdus++; }
@@ -243,7 +269,7 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
         const isPerdu   = isRealise && resultat === 'Perdu';
         const isEnCours = isRealise && isPipeActif;
 
-        accumulate(result, isRealise, isGagne, isPerdu, isEnCours, isNoshow, ca, caEst, coachPris);
+        accumulate(result, isRealise, isGagne, isPerdu, isEnCours, isNoshow, ca, caEst, coachPris, delai);
 
         if (isGagne) dealsGagnes.push({
           entreprise, contact, coach: rdvFaitPar || prisPar, ca,
@@ -261,7 +287,7 @@ export async function fetchRDVData(periodeKey, precPeriodeKey) {
             isRealise && resultat === 'Gagné',
             isRealise && resultat === 'Perdu',
             isRealise && isPipeActif,
-            isNoshow, ca, caEst, coachPris);
+            isNoshow, ca, caEst, coachPris, delai);
         }
       }
     });
