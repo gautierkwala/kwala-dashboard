@@ -45,12 +45,12 @@ const OBJ_MENSUELS = {
   // dérogent sont listés ; les neuf autres retombent sur OBJ_CA_EQUIPE.
   //   9 × 30 000  +  février 15 000  +  mars 15 000  +  août 0  =  300 000 €
   // Août est à zéro sur les trois jauges : viser 20 RDV pour 0 € de CA n'aurait
-  // pas de sens. Février et mars gardent les cibles RDV et deals par défaut,
-  // seul le CA est divisé par deux.
+  // pas de sens. Février et mars sont divisés par deux partout — CA, RDV et
+  // deals — pour que les trois jauges racontent la même histoire.
   tous: {
-    '2026-02': { ca: 15000, rdv: OBJ_RDV_EQUIPE, deals: OBJ_DEALS_EQUIPE },
-    '2026-03': { ca: 15000, rdv: OBJ_RDV_EQUIPE, deals: OBJ_DEALS_EQUIPE },
-    '2026-08': { ca:     0, rdv: 0,              deals: 0 },
+    '2026-02': { ca: 15000, rdv: 10, deals: 4 },
+    '2026-03': { ca: 15000, rdv: 10, deals: 4 },
+    '2026-08': { ca:     0, rdv:  0, deals: 0 },
   },
   Mathilde: {                                  // objectif annuel 107 300 €
     '2026-09': { ca: 14820, rdv: 10, deals: 4 },   // plan : 3,9 ventes
@@ -680,13 +680,11 @@ export default function App() {
                   <div className="kpi-trend neu">— pas de données préc.</div>
                 </div>
                 <div className="kpi">
-                  <div className="kpi-lbl">Pipe actif · hors froid</div>
-                  <div className="kpi-val">{fmtCA(pipe.totalCA)}</div>
+                  <div className="kpi-lbl">Pipe en closing</div>
+                  <div className="kpi-val">{fmtCA(pipe.closingCA)}</div>
                   <div className="kpi-trend neu">
-                    <span style={{ color: '#C0392B', fontWeight: 600 }}>🔥 {fmtCA(pipe.closingCA)}</span>
-                    {' closing · '}
                     <span style={{ color: '#7D5A00', fontWeight: 600 }}>📅 {fmtCA(pipe.encoursCA)}</span>
-                    {' en cours'}
+                    {' en cours, hors estimation'}
                   </div>
                 </div>
               </div>
