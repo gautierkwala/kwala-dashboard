@@ -41,6 +41,17 @@ const OBJ_DEALS_COACH = { Jenny: 4, Mathilde: 4, Gautier: 2, Alexis: 4 };
 // c'est un taux de transfo appliqué au nombre de RDV). On les arrondit : la
 // jauge compte des deals entiers, et « il reste 0,9 vente » n'aide personne.
 const OBJ_MENSUELS = {
+  // Équipe : objectif annuel 2026 de 300 000 € HT. Seuls les trois mois qui
+  // dérogent sont listés ; les neuf autres retombent sur OBJ_CA_EQUIPE.
+  //   9 × 30 000  +  février 15 000  +  mars 15 000  +  août 0  =  300 000 €
+  // Août est à zéro sur les trois jauges : viser 20 RDV pour 0 € de CA n'aurait
+  // pas de sens. Février et mars gardent les cibles RDV et deals par défaut,
+  // seul le CA est divisé par deux.
+  tous: {
+    '2026-02': { ca: 15000, rdv: OBJ_RDV_EQUIPE, deals: OBJ_DEALS_EQUIPE },
+    '2026-03': { ca: 15000, rdv: OBJ_RDV_EQUIPE, deals: OBJ_DEALS_EQUIPE },
+    '2026-08': { ca:     0, rdv: 0,              deals: 0 },
+  },
   Mathilde: {                                  // objectif annuel 107 300 €
     '2026-09': { ca: 14820, rdv: 10, deals: 4 },   // plan : 3,9 ventes
     '2026-10': { ca: 17784, rdv: 12, deals: 5 },   // plan : 4,68
@@ -74,6 +85,8 @@ function getObjectifs(granularite, coach, year, month) {
   if (granularite === 'trimestre') {
     const premier = Math.floor(month / 3) * 3;
     for (let m = premier; m < premier + 3; m++) mois.push(m);
+  } else if (granularite === 'annee') {
+    for (let m = 0; m < 12; m++) mois.push(m);
   } else if (granularite === 'ytd') {
     for (let m = 0; m <= new Date().getMonth(); m++) mois.push(m);
   } else {
@@ -89,11 +102,13 @@ function getObjectifs(granularite, coach, year, month) {
 function getPeriodeKey(granularite, year, month) {
   if (granularite === 'mois') return `mois_${year}${String(month + 1).padStart(2, '0')}`;
   if (granularite === 'trimestre') return `t${Math.floor(month / 3) + 1}`;
+  if (granularite === 'annee') return 'annee';
   return 'ytd';
 }
 
 function getMonthLabel(year, month, granularite) {
   if (granularite === 'trimestre') return `T${Math.floor(month / 3) + 1} ${year}`;
+  if (granularite === 'annee') return `Année ${year}`;
   if (granularite === 'ytd') return `YTD ${year}`;
   return new Date(year, month, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
 }
@@ -554,7 +569,7 @@ export default function App() {
               <button className="nav-btn" onClick={nextMonth}>›</button>
             </div>
             <div className="pills">
-              {[['mois','Mois'],['trimestre','Trimestre'],['ytd','YTD']].map(([k,l]) => (
+              {[['mois','Mois'],['trimestre','Trimestre'],['ytd','YTD'],['annee','Année']].map(([k,l]) => (
                 <button key={k} className={`pill${granularite === k ? ' on' : ''}`} onClick={() => setGranularite(k)}>{l}</button>
               ))}
             </div>

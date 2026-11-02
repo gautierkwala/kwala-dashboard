@@ -63,7 +63,13 @@ function matchesPeriode(iso, periodeKey) {
   const d = parseDate(iso);
   if (!d) return false;
   const curY = new Date().getFullYear();
-  if (periodeKey === 'ytd') return d.year === curY;
+  // « Année » = les 12 mois, pour se comparer à l'objectif annuel de 300 000 €.
+  if (periodeKey === 'annee') return d.year === curY;
+  // « YTD » s'arrête au mois en cours. Avant, il renvoyait toute l'année : les
+  // deals datés d'un mois à venir étaient comptés dans le réalisé alors que
+  // getObjectifs() ne sommait les objectifs que jusqu'au mois courant. La jauge
+  // comparait donc une année de CA à une fraction d'objectif.
+  if (periodeKey === 'ytd') return d.year === curY && d.month <= new Date().getMonth();
   if (periodeKey.startsWith('t')) {
     const t = parseInt(periodeKey[1]) - 1;
     return d.year === curY && Math.floor(d.month / 3) === t;
@@ -78,7 +84,7 @@ function matchesPeriode(iso, periodeKey) {
 }
 
 export function getPrecPeriode(periodeKey) {
-  if (periodeKey === 'ytd') return null;
+  if (periodeKey === 'ytd' || periodeKey === 'annee') return null;
   if (periodeKey.startsWith('t')) {
     const t = parseInt(periodeKey[1]);
     if (t === 1) return null;
